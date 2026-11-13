@@ -19,7 +19,7 @@ describe('JsonDatabase', () => {
     dir = await mkdtemp(join(tmpdir(), 'jsondb-'));
     file = join(dir, 'db.json');
     db = new JsonDatabase(file);
-    await db.onModuleInit();
+    await db.init();
     repo = new JsonRepository<Item>(db, 'items');
   });
 
@@ -58,7 +58,7 @@ describe('JsonDatabase', () => {
     expect(saved.collections.items).toHaveLength(1);
 
     const reloaded = new JsonDatabase(file);
-    await reloaded.onModuleInit();
+    await reloaded.init();
     const items = await new JsonRepository<Item>(reloaded, 'items').findAll();
     expect(items[0].value).toBe(7);
   });

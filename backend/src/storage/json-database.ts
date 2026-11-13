@@ -1,4 +1,4 @@
-import { Injectable, OnModuleInit } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { existsSync } from 'node:fs';
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
@@ -17,14 +17,15 @@ interface DbData {
  * - 트랜잭션 중 오류가 나면 시작 시점으로 되돌린다 (rollback).
  */
 @Injectable()
-export class JsonDatabase implements OnModuleInit {
+export class JsonDatabase {
   private data: DbData = { collections: {}, sequences: {} };
   private readonly mutex = new Mutex();
   private readonly txContext = new AsyncLocalStorage<true>();
 
   constructor(private readonly filePath: string) {}
 
-  async onModuleInit() {
+  /** 파일을 읽어 메모리에 올린다. 모듈 훅 순서에 기대지 않도록 StorageModule 팩토리에서 await 한다. */
+  async init() {
     if (existsSync(this.filePath)) {
       this.data = JSON.parse(await readFile(this.filePath, 'utf8')) as DbData;
     } else {
