@@ -52,7 +52,11 @@ export class AllExceptionsFilter implements ExceptionFilter {
       }
       return {
         status,
-        body: { code: `HTTP_${status}`, message: exception.message, data: null },
+        body: {
+          code: `HTTP_${status}`,
+          message: exception.message,
+          data: null,
+        },
       };
     }
 
