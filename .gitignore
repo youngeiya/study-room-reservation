@@ -1,2 +1,5 @@
 ﻿# Local JSON database (created when the backend runs)
 /backend/data/
+
+# IDE settings (personal)
+.idea/
