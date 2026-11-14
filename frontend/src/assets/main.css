@@ -1,35 +1,155 @@
-@import './base.css';
+/* 화면에 시간을 많이 쓰지 않기 위해 라이브러리 없이 최소한의 스타일만 둔다. */
+:root {
+  --bg: #f6f7f9;
+  --panel: #ffffff;
+  --text: #1f2430;
+  --muted: #6b7280;
+  --border: #dfe3ea;
+  --primary: #2f6fed;
+  --danger: #d6336c;
+  --ok: #1c8a4a;
+  --warn: #b7791f;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family:
+    system-ui,
+    -apple-system,
+    'Segoe UI',
+    'Malgun Gothic',
+    sans-serif;
+  line-height: 1.5;
+}
 
 #app {
-  max-width: 1280px;
+  max-width: 960px;
   margin: 0 auto;
-  padding: 2rem;
-  font-weight: normal;
+  padding: 16px;
 }
 
-a,
-.green {
+a {
+  color: var(--primary);
   text-decoration: none;
-  color: hsla(160, 100%, 37%, 1);
-  transition: 0.4s;
-  padding: 3px;
+}
+a:hover {
+  text-decoration: underline;
 }
 
-@media (hover: hover) {
-  a:hover {
-    background-color: hsla(160, 100%, 37%, 0.2);
-  }
+h1 {
+  font-size: 1.4rem;
+  margin: 0 0 12px;
+}
+h2 {
+  font-size: 1.1rem;
+  margin: 0 0 8px;
 }
 
-@media (min-width: 1024px) {
-  body {
-    display: flex;
-    place-items: center;
-  }
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 16px;
+  margin-bottom: 16px;
+}
 
-  #app {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    padding: 0 2rem;
-  }
+table {
+  width: 100%;
+  border-collapse: collapse;
+}
+th,
+td {
+  text-align: left;
+  padding: 8px;
+  border-bottom: 1px solid var(--border);
+  vertical-align: middle;
+}
+th {
+  color: var(--muted);
+  font-weight: 600;
+  font-size: 0.85rem;
+}
+
+input,
+select,
+button {
+  font: inherit;
+}
+input,
+select {
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: #fff;
+}
+
+button {
+  padding: 6px 12px;
+  border: 1px solid var(--primary);
+  border-radius: 6px;
+  background: var(--primary);
+  color: #fff;
+  cursor: pointer;
+}
+button.secondary {
+  background: #fff;
+  color: var(--primary);
+}
+button.danger {
+  background: #fff;
+  color: var(--danger);
+  border-color: var(--danger);
+}
+button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.error {
+  background: #fdecf2;
+  color: var(--danger);
+  border: 1px solid #f6c3d6;
+  border-radius: 6px;
+  padding: 8px 12px;
+  margin: 0 0 12px;
+}
+.muted {
+  color: var(--muted);
+}
+
+.badge {
+  display: inline-block;
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  border: 1px solid currentColor;
+}
+.badge.ok {
+  color: var(--ok);
+}
+.badge.full {
+  color: var(--warn);
+}
+.badge.off {
+  color: var(--muted);
 }
