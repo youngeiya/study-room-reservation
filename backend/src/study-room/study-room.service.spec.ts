@@ -19,6 +19,7 @@ const base = {
 describe('StudyRoomService', () => {
   let dir: string;
   let db: JsonDatabase;
+  let rooms: JsonRepository<StudyRoom>;
   let visits: JsonRepository<VisitReservation>;
   let service: StudyRoomService;
 
@@ -26,7 +27,7 @@ describe('StudyRoomService', () => {
     dir = await mkdtemp(join(tmpdir(), 'room-'));
     db = new JsonDatabase(join(dir, 'db.json'));
     await db.init();
-    const rooms = new JsonRepository<StudyRoom>(db, STUDY_ROOM_COLLECTION);
+    rooms = new JsonRepository<StudyRoom>(db, STUDY_ROOM_COLLECTION);
     visits = new JsonRepository<VisitReservation>(db, VISIT_COLLECTION);
     // 시각을 고정한 Clock (서비스가 new Date()를 직접 쓰지 않는 이점)
     const clock = { now: () => new Date(NOW) } as Clock;
@@ -35,22 +36,26 @@ describe('StudyRoomService', () => {
 
   afterEach(() => rm(dir, { recursive: true, force: true }));
 
+  // 이 테스트는 자습실 서비스만 검증하므로, "신청이 이미 있는 상태"를 저장소로 직접 만든다.
+  // (실제 신청 흐름과 인원 갱신은 visit.service.spec.ts 에서 검증)
   const addVisit = (
     roomId: number,
     studentId: number,
     visitAt = '2026-11-25T00:00:00.000Z',
-    status: VisitReservation['status'] = 'ACTIVE',
   ) =>
-    db.transaction(() =>
-      visits.create({
+    db.transaction(async () => {
+      const visit = await visits.create({
         roomId,
         studentId,
         visitAt,
-        status,
+        status: 'ACTIVE',
         createdAt: NOW,
         updatedAt: NOW,
-      }),
-    );
+      });
+      const room = (await rooms.findById(roomId))!;
+      await rooms.update({ ...room, currentCount: room.currentCount + 1 });
+      return visit;
+    });
 
   it('시작이 종료보다 늦거나 같으면 등록할 수 없다', async () => {
     await expect(
@@ -58,26 +63,26 @@ describe('StudyRoomService', () => {
     ).rejects.toMatchObject({ code: 'INVALID_PERIOD' });
   });
 
-  it('등록하면 날짜가 UTC ISO로 통일되어 저장된다', async () => {
+  it('등록하면 날짜가 UTC ISO로 통일되고, 현재 인원은 0으로 시작한다', async () => {
     const room = await service.create({
       ...base,
       startDate: '2026-11-20T09:00:00+09:00',
     });
     expect(room.startDate).toBe('2026-11-20T00:00:00.000Z');
     expect(room.createdAt).toBe(NOW);
+    expect(room.currentCount).toBe(0);
   });
 
-  it('목록은 삭제된 자습실을 빼고, 취소된 신청은 인원에서 제외한다', async () => {
+  it('목록은 삭제된 자습실을 빼고 현재 인원을 보여 준다', async () => {
     const a = await service.create(base);
     const b = await service.create(base);
     await addVisit(a.id, 1);
     await addVisit(a.id, 2);
-    await addVisit(a.id, 3, undefined, 'CANCELLED');
     await service.remove(b.id);
 
     const list = await service.findAll();
     expect(list).toHaveLength(1);
-    expect(list[0]).toMatchObject({ id: a.id, currentPersonnel: 2 });
+    expect(list[0]).toMatchObject({ id: a.id, currentCount: 2 });
   });
 
   it('없는 자습실은 ROOM_NOT_FOUND', async () => {
@@ -106,7 +111,7 @@ describe('StudyRoomService', () => {
       service.update(room.id, { maxPersonnel: 1 }),
     ).rejects.toMatchObject({
       code: 'CAPACITY_BELOW_APPLIED',
-      data: { currentPersonnel: 2 },
+      data: { currentCount: 2 },
     });
     // 같은 값까지는 허용
     await expect(

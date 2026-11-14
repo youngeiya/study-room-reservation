@@ -7,6 +7,8 @@ export type VisitAction = 'CREATE' | 'UPDATE' | 'CANCEL';
  */
 export interface VisitReservation {
   id: number;
+  /** 낙관적 락용 버전. 같은 신청을 동시에 수정·취소하는 충돌을 막는다. */
+  version: number;
   roomId: number;
   studentId: number;
   visitAt: string;
@@ -21,6 +23,8 @@ export interface VisitReservation {
  */
 export interface VisitHistory {
   id: number;
+  /** 저장소 공통 필드. 이력은 추가만 하므로 항상 0 에서 바뀌지 않는다. */
+  version: number;
   reservationId: number;
   roomId: number;
   studentId: number;
@@ -29,6 +33,12 @@ export interface VisitHistory {
   afterVisitAt: string | null;
   createdAt: string;
 }
+
+/** 이력 조회 응답용: 화면에서 누가 했는지 보이도록 학생 이름을 덧붙인다. */
+export type VisitHistoryView = VisitHistory & { studentName: string | null };
+
+/** 내 신청 목록 응답용: 자습실 이름을 덧붙인다. */
+export type VisitView = VisitReservation & { roomName: string | null };
 
 export const VISIT_COLLECTION = 'visitReservations';
 export const VISIT_HISTORY_COLLECTION = 'visitHistories';

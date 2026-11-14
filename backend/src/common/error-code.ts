@@ -41,6 +41,10 @@ export const ErrorCode = {
     status: HttpStatus.BAD_REQUEST,
     message: '방문 시간이 자습실 운영 기간을 벗어났습니다.',
   },
+  NOT_VISIT_OWNER: {
+    status: HttpStatus.FORBIDDEN,
+    message: '본인의 방문 신청만 수정·취소할 수 있습니다.',
+  },
   VISIT_ALREADY_CANCELLED: {
     status: HttpStatus.CONFLICT,
     message: '이미 취소된 신청입니다.',
@@ -52,6 +56,10 @@ export const ErrorCode = {
   PERIOD_CONFLICTS_VISITS: {
     status: HttpStatus.CONFLICT,
     message: '변경할 운영 기간을 벗어나는 신청이 있습니다.',
+  },
+  CONCURRENT_MODIFICATION: {
+    status: HttpStatus.CONFLICT,
+    message: '다른 요청이 먼저 처리되었습니다. 잠시 후 다시 시도해 주세요.',
   },
   INTERNAL_ERROR: {
     status: HttpStatus.INTERNAL_SERVER_ERROR,
