@@ -1,3 +1,2 @@
-﻿
-# Local JSON database
-/data
+﻿# Local JSON database (created when the backend runs)
+/backend/data/
