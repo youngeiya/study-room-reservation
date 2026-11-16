@@ -1,15 +1,14 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { onMounted, ref } from 'vue'
 import type { SubmitEventPromise } from 'vuetify'
 import { mdiDelete, mdiPencil, mdiPlus } from '@mdi/js'
 import { api } from '@/api'
 import type { Student, StudentPayload, StudentStatus } from '@/api/types'
 import { useAction } from '@/composables/useAction'
-import { useSessionStore } from '@/stores/session'
 
 // FR-STD-01: 학생 목록 / FR-STD-02: 학생 등록·수정·삭제 (강사 전용 화면)
-// 목록은 앱이 뜰 때 불러온 session.students 를 쓰고, 변경하면 다시 불러온다.
-const session = useSessionStore()
+// 이 화면이 열릴 때 목록을 불러오고, 등록·수정·삭제하면 다시 불러온다.
+const students = ref<Student[]>([])
 const { error, busy, run } = useAction()
 
 const STATUS_LABEL: Record<StudentStatus, string> = {
@@ -34,6 +33,7 @@ const form = ref({
   name: '',
   phone: '',
   studentNo: '',
+  password: '',
   guardianPhone: '',
   grade: null as string | null,
   memo: '',
@@ -44,6 +44,7 @@ const required = (v: string) => (v ?? '').trim() !== '' || '필수 입력입니�
 // 서버와 같은 형식 (최종 검사는 서버가 한다)
 const phoneRule = (v: string) => /^0\d{1,2}-?\d{3,4}-?\d{4}$/.test(v) || '예) 010-1234-5678'
 const optionalPhoneRule = (v: string) => !v || phoneRule(v) === true || '예) 010-1234-5678'
+const passwordRule = (v: string) => !v || v.length >= 4 || '4자 이상 입력해 주세요.'
 const studentNoRule = (v: string) => /^[A-Za-z0-9-]{3,20}$/.test(v) || '영문·숫자·하이픈 3~20자'
 
 function openCreate() {
@@ -52,6 +53,7 @@ function openCreate() {
     name: '',
     phone: '',
     studentNo: '',
+    password: '',
     guardianPhone: '',
     grade: null,
     memo: '',
@@ -66,6 +68,7 @@ function openEdit(student: Student) {
     name: student.name,
     phone: student.phone,
     studentNo: student.studentNo ?? '',
+    password: '', // 수정할 때는 비워 두면 비밀번호를 바꾸지 않는다
     guardianPhone: student.guardianPhone ?? '',
     grade: student.grade,
     memo: student.memo ?? '',
@@ -75,8 +78,11 @@ function openEdit(student: Student) {
 }
 
 async function reload() {
-  await run(() => session.loadStudents())
+  const list = await run(() => api.listStudents())
+  if (list) students.value = list
 }
+
+onMounted(reload)
 
 async function save(event: SubmitEventPromise) {
   const { valid } = await event
@@ -90,6 +96,8 @@ async function save(event: SubmitEventPromise) {
     guardianPhone: f.guardianPhone.trim() || null,
     grade: f.grade || null,
     memo: f.memo.trim() || null,
+    // 비밀번호는 입력했을 때만 보낸다 (등록: 초기 비밀번호, 수정: 재설정). 비우면 등록은 학번, 수정은 그대로
+    ...(f.password ? { password: f.password } : {}),
   }
   const target = editing.value
   const saved = await run(() =>
@@ -134,6 +142,17 @@ async function remove(student: Student) {
                 placeholder="2026001"
                 maxlength="20"
                 :rules="[required, studentNoRule]"
+              />
+            </v-col>
+            <v-col cols="12" sm="6">
+              <v-text-field
+                v-model="form.password"
+                type="password"
+                autocomplete="new-password"
+                :label="editing ? '비밀번호 재설정 (선택)' : '초기 비밀번호 (선택)'"
+                :hint="editing ? '비워 두면 바꾸지 않아요' : '비워 두면 학번과 같아요'"
+                persistent-hint
+                :rules="[passwordRule]"
               />
             </v-col>
             <v-col cols="12" sm="6">
@@ -189,7 +208,7 @@ async function remove(student: Student) {
     </v-card>
   </v-dialog>
 
-  <v-alert v-if="session.students.length === 0" type="info" variant="tonal">
+  <v-alert v-if="students.length === 0" type="info" variant="tonal">
     등록된 학생이 없습니다.
   </v-alert>
   <v-card v-else>
@@ -205,7 +224,7 @@ async function remove(student: Student) {
         </tr>
       </thead>
       <tbody>
-        <tr v-for="s in session.students" :key="s.id">
+        <tr v-for="s in students" :key="s.id">
           <td>{{ s.studentNo ?? '-' }}</td>
           <td>
             {{ s.name }}

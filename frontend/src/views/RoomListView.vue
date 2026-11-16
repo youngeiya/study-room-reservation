@@ -5,11 +5,13 @@ import { api } from '@/api'
 import type { RoomPayload, StudyRoom } from '@/api/types'
 import RoomForm from '@/components/RoomForm.vue'
 import { useAction } from '@/composables/useAction'
+import { useRouteNames } from '@/composables/useRouteNames'
 import { useSessionStore } from '@/stores/session'
 import { formatDateTime } from '@/utils/datetime'
 import { isFull, occupancyColor, occupancyPercent } from '@/utils/room'
 
 const session = useSessionStore()
+const names = useRouteNames()
 const { error, busy, run } = useAction()
 
 const rooms = ref<StudyRoom[]>([])
@@ -105,7 +107,7 @@ onMounted(load)
           <v-btn
             color="primary"
             variant="tonal"
-            :to="{ name: 'room-detail', params: { id: room.id } }"
+            :to="{ name: names.roomDetail, params: { id: room.id } }"
           >
             상세 보기
           </v-btn>

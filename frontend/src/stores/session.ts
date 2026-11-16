@@ -1,66 +1,54 @@
 import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
 import { api } from '@/api'
-import type { Role, Student } from '@/api/types'
-
-const KEY_ROLE = 'sr.role'
-const KEY_STUDENT = 'sr.studentId'
-
-// localStorage 는 막혀 있는 환경(시크릿 모드 등)이 있어서 실패해도 앱이 동작해야 한다.
-function read(key: string): string | null {
-  try {
-    return localStorage.getItem(key)
-  } catch {
-    return null
-  }
-}
-function write(key: string, value: string) {
-  try {
-    localStorage.setItem(key, value)
-  } catch {
-    // 저장하지 못해도 이번 접속에서는 메모리 상태로 계속 동작한다
-  }
-}
+import { clearToken, getToken, setToken } from '@/api/token'
+import type { AuthUser, Role } from '@/api/types'
 
 /**
- * "지금 누구로 보고 있는가"를 담는 저장소. 이 과제는 로그인이 없으므로
- * 화면에서 강사/학생(그리고 어떤 학생인지)을 고르는 값이 로그인을 대신한다.
+ * "지금 누가 로그인해 있는가"를 담는 저장소.
+ * 로그인하면 서버가 준 토큰을 저장하고(새로고침해도 유지), 화면이 열릴 때 서버에 토큰이 아직 유효한지 확인한다.
+ * 강사/학생 구분과 학생 번호는 이 값(서버가 확인한 것)에서만 가져오고, 화면에서 임의로 바꿀 수 없다.
  */
 export const useSessionStore = defineStore('session', () => {
-  const role = ref<Role>(read(KEY_ROLE) === 'STUDENT' ? 'STUDENT' : 'INSTRUCTOR')
-  const studentId = ref<number | null>(Number(read(KEY_STUDENT)) || null)
-  const students = ref<Student[]>([])
+  const user = ref<AuthUser | null>(null)
+  // 앱이 처음 열릴 때 토큰 확인(restore)이 끝났는지. 확인이 끝나기 전에는 로그인 여부를 판단하지 않는다.
+  const restored = ref(false)
+  let restoring: Promise<void> | null = null
 
-  const isInstructor = computed(() => role.value === 'INSTRUCTOR')
-  const currentStudent = computed(
-    () => students.value.find((s) => s.id === studentId.value) ?? null,
-  )
+  const isLoggedIn = computed(() => user.value !== null)
+  const role = computed<Role | null>(() => user.value?.role ?? null)
+  const isInstructor = computed(() => user.value?.role === 'INSTRUCTOR')
+  const studentId = computed(() => (user.value?.role === 'STUDENT' ? user.value.id : null))
 
-  function setRole(next: Role) {
-    role.value = next
-    write(KEY_ROLE, next)
+  /** 로그인. 틀리면 ApiError(INVALID_CREDENTIALS)가 던져진다. */
+  async function login(roleToLogin: Role, loginId: string, password: string) {
+    const result = await api.login({ role: roleToLogin, loginId: loginId.trim(), password })
+    setToken(result.token)
+    user.value = result.user
+    restored.value = true
   }
 
-  function setStudent(id: number) {
-    studentId.value = id
-    write(KEY_STUDENT, String(id))
+  function logout() {
+    clearToken()
+    user.value = null
   }
 
-  /** 학생 목록을 불러오고, 선택된 학생이 없거나 사라졌으면 첫 학생을 고른다. */
-  async function loadStudents() {
-    students.value = await api.listStudents()
-    const first = students.value[0]
-    if (!currentStudent.value && first) setStudent(first.id)
+  /** 저장된 토큰이 있으면 서버에 확인해서 로그인 상태를 되살린다 (한 번만 실행된다). */
+  function restore(): Promise<void> {
+    if (restoring) return restoring
+    restoring = (async () => {
+      if (getToken()) {
+        try {
+          user.value = await api.me()
+        } catch {
+          clearToken() // 만료되었거나 삭제된 계정이면 로그아웃 상태로 시작
+          user.value = null
+        }
+      }
+      restored.value = true
+    })()
+    return restoring
   }
 
-  return {
-    role,
-    studentId,
-    students,
-    isInstructor,
-    currentStudent,
-    setRole,
-    setStudent,
-    loadStudents,
-  }
+  return { user, restored, isLoggedIn, role, isInstructor, studentId, login, logout, restore }
 })

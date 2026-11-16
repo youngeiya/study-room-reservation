@@ -1,5 +1,8 @@
 import { request } from './client'
 import type {
+  AuthUser,
+  LoginResult,
+  Role,
   RoomPayload,
   Student,
   StudentPayload,
@@ -11,6 +14,13 @@ import type {
 
 /** 백엔드 엔드포인트 한 줄당 함수 하나. 화면은 URL 을 직접 알 필요가 없다. */
 export const api = {
+  // 로그인
+  login: (body: { role: Role; loginId: string; password: string }) =>
+    request<LoginResult>('POST', '/auth/login', body),
+  me: () => request<AuthUser>('GET', '/auth/me'),
+  changePassword: (body: { currentPassword: string; newPassword: string }) =>
+    request<null>('PATCH', '/auth/password', body),
+
   // 자습실
   listRooms: () => request<StudyRoom[]>('GET', '/study-rooms'),
   getRoom: (id: number) => request<StudyRoom>('GET', `/study-rooms/${id}`),
@@ -26,13 +36,12 @@ export const api = {
     request<Student>('PATCH', `/students/${id}`, body),
   deleteStudent: (id: number) => request<null>('DELETE', `/students/${id}`),
 
-  // 방문 신청·이력
-  createVisit: (roomId: number, body: { studentId: number; visitAt: string }) =>
+  // 방문 신청·이력 (신청하는 학생은 서버가 로그인 정보로 알아내므로 보내지 않는다)
+  createVisit: (roomId: number, body: { visitAt: string }) =>
     request<VisitReservation>('POST', `/study-rooms/${roomId}/visits`, body),
-  updateVisit: (id: number, body: { studentId: number; visitAt: string }) =>
+  updateVisit: (id: number, body: { visitAt: string }) =>
     request<VisitReservation>('PATCH', `/visits/${id}`, body),
-  cancelVisit: (id: number, studentId: number) =>
-    request<VisitReservation>('POST', `/visits/${id}/cancel`, { studentId }),
+  cancelVisit: (id: number) => request<VisitReservation>('POST', `/visits/${id}/cancel`),
   listHistories: (roomId: number) =>
     request<VisitHistory[]>('GET', `/study-rooms/${roomId}/histories`),
   listStudentVisits: (studentId: number) =>

@@ -1,3 +1,5 @@
+import { getToken, notifyUnauthorized } from './token'
+
 /** 백엔드가 항상 돌려주는 공통 응답: { code, message, data }. 성공이면 code 는 'OK'. */
 interface ApiEnvelope<T> {
   code: string
@@ -26,9 +28,14 @@ type Method = 'GET' | 'POST' | 'PATCH' | 'DELETE'
 export async function request<T>(method: Method, path: string, body?: unknown): Promise<T> {
   let res: Response
   try {
+    // 로그인했다면 모든 요청에 토큰을 실어 보낸다 (서버가 "누구의 요청인지" 확인한다)
+    const headers: Record<string, string> = {}
+    if (body !== undefined) headers['Content-Type'] = 'application/json'
+    const token = getToken()
+    if (token) headers.Authorization = `Bearer ${token}`
     res = await fetch(`/api${path}`, {
       method,
-      headers: body === undefined ? undefined : { 'Content-Type': 'application/json' },
+      headers,
       body: body === undefined ? undefined : JSON.stringify(body),
     })
   } catch {
@@ -41,6 +48,8 @@ export async function request<T>(method: Method, path: string, body?: unknown): 
   }
 
   const json = (await res.json().catch(() => null)) as ApiEnvelope<T> | null
+  // 토큰이 만료·무효이면(로그인 화면의 "비밀번호 틀림" 같은 오류와 구분) 로그인 화면으로 보낸다
+  if (res.status === 401 && json?.code === 'UNAUTHORIZED') notifyUnauthorized()
   if (!res.ok || json === null || json.code !== 'OK') {
     throw new ApiError(
       json?.code ?? 'UNKNOWN',

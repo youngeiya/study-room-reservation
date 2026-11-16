@@ -18,6 +18,19 @@ export interface StudyRoom {
   deletedAt: string | null
 }
 
+/** 로그인한 사용자. 강사는 loginId 가 아이디, 학생은 학번이다. */
+export interface AuthUser {
+  role: Role
+  id: number
+  name: string
+  loginId: string
+}
+
+export interface LoginResult {
+  token: string
+  user: AuthUser
+}
+
 /** 재원 상태: 재원 / 휴원 / 퇴원. 재원인 학생만 신청할 수 있다. */
 export type StudentStatus = 'ENROLLED' | 'ON_LEAVE' | 'WITHDRAWN'
 
@@ -71,6 +84,8 @@ export interface StudentPayload {
   name: string
   phone: string
   studentNo: string
+  /** 초기 비밀번호(등록) / 비밀번호 재설정(수정). 비우면 보내지 않는다 (등록 때는 학번이 초기 비밀번호) */
+  password?: string
   /** 선택 값은 비우면 null 을 보낸다 (서버가 값을 비운다) */
   guardianPhone: string | null
   grade: string | null

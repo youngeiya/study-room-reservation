@@ -3,11 +3,13 @@ import { onMounted, ref } from 'vue'
 import { api } from '@/api'
 import type { VisitView } from '@/api/types'
 import { useAction } from '@/composables/useAction'
+import { useRouteNames } from '@/composables/useRouteNames'
 import { useSessionStore } from '@/stores/session'
 import { formatDateTime, isoToLocalInput, localInputToIso } from '@/utils/datetime'
 
 // FR-VST-04: 학생 본인의 신청 목록 (취소된 신청도 상태와 함께 보여 준다)
 const session = useSessionStore()
+const names = useRouteNames()
 const { error, busy, run } = useAction()
 
 const visits = ref<VisitView[]>([])
@@ -28,7 +30,7 @@ function startEdit(v: VisitView) {
 // FR-VST-02: 방문 시간 수정
 async function saveEdit(v: VisitView) {
   const updated = await run(() =>
-    api.updateVisit(v.id, { studentId: v.studentId, visitAt: localInputToIso(editValue.value) }),
+    api.updateVisit(v.id, { visitAt: localInputToIso(editValue.value) }),
   )
   if (updated) {
     editingId.value = null
@@ -39,7 +41,7 @@ async function saveEdit(v: VisitView) {
 // FR-VST-03: 방문 취소
 async function cancel(v: VisitView) {
   if (!confirm('방문 신청을 취소할까요?')) return
-  const cancelled = await run(() => api.cancelVisit(v.id, v.studentId))
+  const cancelled = await run(() => api.cancelVisit(v.id))
   if (cancelled) await load()
 }
 
@@ -47,7 +49,7 @@ onMounted(load)
 </script>
 
 <template>
-  <h1 class="text-h5 font-weight-bold mb-4">내 신청 ({{ session.currentStudent?.name ?? '-' }})</h1>
+  <h1 class="text-h5 font-weight-bold mb-4">내 신청 ({{ session.user?.name ?? '-' }})</h1>
 
   <v-alert v-if="error" type="error" variant="tonal" class="mb-4">{{ error }}</v-alert>
 
@@ -65,7 +67,7 @@ onMounted(load)
       <tbody>
         <tr v-for="v in visits" :key="v.id">
           <td>
-            <router-link :to="{ name: 'room-detail', params: { id: v.roomId } }">
+            <router-link :to="{ name: names.roomDetail, params: { id: v.roomId } }">
               {{ v.roomName ?? `자습실 #${v.roomId}` }}
             </router-link>
           </td>

@@ -6,6 +6,7 @@ import { api } from '@/api'
 import type { RoomPayload, StudyRoom, VisitAction, VisitHistory, VisitView } from '@/api/types'
 import RoomForm from '@/components/RoomForm.vue'
 import { useAction } from '@/composables/useAction'
+import { useRouteNames } from '@/composables/useRouteNames'
 import { useSessionStore } from '@/stores/session'
 import { formatDateTime, isoToLocalInput, localInputToIso } from '@/utils/datetime'
 import { isFull as isRoomFull, occupancyColor, occupancyPercent } from '@/utils/room'
@@ -13,6 +14,7 @@ import { isFull as isRoomFull, occupancyColor, occupancyPercent } from '@/utils/
 const route = useRoute()
 const router = useRouter()
 const session = useSessionStore()
+const names = useRouteNames()
 const { error, errorCode, busy, run } = useAction()
 
 const roomId = computed(() => Number(route.params.id))
@@ -73,7 +75,7 @@ async function removeRoom() {
     await api.deleteRoom(roomId.value)
     return true
   })
-  if (done) router.push({ name: 'rooms' })
+  if (done) router.push({ name: names.value.rooms })
 }
 
 // ── 학생 ──
@@ -81,10 +83,8 @@ async function removeRoom() {
 async function apply() {
   if (session.studentId === null || !visitInput.value) return
   const created = await run(() =>
-    api.createVisit(roomId.value, {
-      studentId: session.studentId!,
-      visitAt: localInputToIso(visitInput.value),
-    }),
+    // 누가 신청하는지는 서버가 로그인 정보(토큰)로 알아낸다 - 학생 번호를 보내지 않는다
+    api.createVisit(roomId.value, { visitAt: localInputToIso(visitInput.value) }),
   )
   if (created) {
     visitInput.value = ''
@@ -110,10 +110,7 @@ async function saveVisit() {
   const visit = activeVisit.value
   if (!visit) return
   const updated = await run(() =>
-    api.updateVisit(visit.id, {
-      studentId: visit.studentId,
-      visitAt: localInputToIso(visitInput.value),
-    }),
+    api.updateVisit(visit.id, { visitAt: localInputToIso(visitInput.value) }),
   )
   if (updated) {
     editingVisit.value = false
@@ -126,13 +123,13 @@ async function saveVisit() {
 async function cancelVisit() {
   const visit = activeVisit.value
   if (!visit || !confirm('방문 신청을 취소할까요?')) return
-  const cancelled = await run(() => api.cancelVisit(visit.id, visit.studentId))
+  const cancelled = await run(() => api.cancelVisit(visit.id))
   if (cancelled) await load()
 }
 </script>
 
 <template>
-  <v-btn variant="text" :prepend-icon="mdiArrowLeft" :to="{ name: 'rooms' }" class="mb-2">
+  <v-btn variant="text" :prepend-icon="mdiArrowLeft" :to="{ name: names.rooms }" class="mb-2">
     자습실 목록
   </v-btn>
 
