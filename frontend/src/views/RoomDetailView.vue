@@ -1,22 +1,16 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import {
-  mdiArrowLeft,
-  mdiCalendarClock,
-  mdiCamera,
-  mdiDelete,
-  mdiImageOff,
-  mdiPencil,
-} from '@mdi/js'
+import { mdiArrowLeft, mdiCalendarClock, mdiCamera, mdiDelete, mdiPencil } from '@mdi/js'
 import { api } from '@/api'
 import type { RoomPayload, StudyRoom, VisitAction, VisitHistory, VisitView } from '@/api/types'
 import RoomForm from '@/components/RoomForm.vue'
+import RoomImage from '@/components/RoomImage.vue'
 import { useAction } from '@/composables/useAction'
 import { useRouteNames } from '@/composables/useRouteNames'
 import { useSessionStore } from '@/stores/session'
 import { formatDateTime, isoToLocalInput, localInputToIso } from '@/utils/datetime'
-import { isFull as isRoomFull, occupancyColor, occupancyPercent, roomImageUrl } from '@/utils/room'
+import { isFull as isRoomFull, occupancyColor, occupancyPercent } from '@/utils/room'
 
 const route = useRoute()
 const router = useRouter()
@@ -190,14 +184,7 @@ async function cancelVisit() {
   <template v-if="room">
     <!-- 자습실 정보 -->
     <v-card class="mb-4">
-      <v-img v-if="roomImageUrl(room)" :src="roomImageUrl(room)!" height="260" cover />
-      <div
-        v-else
-        class="d-flex align-center justify-center bg-grey-lighten-3 text-medium-emphasis"
-        style="height: 260px"
-      >
-        <v-icon :icon="mdiImageOff" size="40" />
-      </div>
+      <RoomImage :room="room" :height="260" />
       <v-card-item>
         <template #title>
           <span class="text-h5 font-weight-bold">{{ room.name }}</span>

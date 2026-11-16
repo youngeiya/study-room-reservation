@@ -1,14 +1,15 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
-import { mdiCalendarRange, mdiDelete, mdiImageOff, mdiPlus } from '@mdi/js'
+import { mdiCalendarRange, mdiDelete, mdiPlus } from '@mdi/js'
 import { api } from '@/api'
 import type { RoomPayload, StudyRoom } from '@/api/types'
 import RoomForm from '@/components/RoomForm.vue'
+import RoomImage from '@/components/RoomImage.vue'
 import { useAction } from '@/composables/useAction'
 import { useRouteNames } from '@/composables/useRouteNames'
 import { useSessionStore } from '@/stores/session'
 import { formatDateTime } from '@/utils/datetime'
-import { isFull, occupancyColor, occupancyPercent, roomImageUrl } from '@/utils/room'
+import { isFull, occupancyColor, occupancyPercent } from '@/utils/room'
 
 const session = useSessionStore()
 const names = useRouteNames()
@@ -73,14 +74,7 @@ onMounted(load)
   <v-row v-else>
     <v-col v-for="room in rooms" :key="room.id" cols="12" sm="6" lg="4">
       <v-card height="100%" class="d-flex flex-column">
-        <v-img v-if="roomImageUrl(room)" :src="roomImageUrl(room)!" height="160" cover />
-        <div
-          v-else
-          class="d-flex align-center justify-center bg-grey-lighten-3 text-medium-emphasis"
-          style="height: 160px"
-        >
-          <v-icon :icon="mdiImageOff" size="40" />
-        </div>
+        <RoomImage :room="room" :height="160" />
         <v-card-item>
           <template #title>
             <div class="font-weight-bold text-wrap" style="word-break: keep-all">
