@@ -29,6 +29,18 @@ export const ErrorCode = {
     status: HttpStatus.BAD_REQUEST,
     message: '현재 비밀번호가 올바르지 않습니다.',
   },
+  ROOM_ALREADY_ENDED: {
+    status: HttpStatus.BAD_REQUEST,
+    message: '이미 종료된 기간의 자습실은 등록·수정할 수 없습니다.',
+  },
+  PERIOD_TOO_LONG: {
+    status: HttpStatus.BAD_REQUEST,
+    message: '운영 기간은 최대 366일까지 설정할 수 있습니다.',
+  },
+  TOO_MANY_LOGIN_ATTEMPTS: {
+    status: HttpStatus.TOO_MANY_REQUESTS,
+    message: '로그인 시도가 너무 많습니다. 잠시 후 다시 시도해 주세요.',
+  },
   ROOM_NOT_FOUND: {
     status: HttpStatus.NOT_FOUND,
     message: '자습실을 찾을 수 없습니다.',

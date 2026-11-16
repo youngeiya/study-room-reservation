@@ -5,6 +5,7 @@ import { StudentModule } from '../student/student.module';
 import { AuthController } from './auth.controller';
 import { AuthGuard } from './auth.guard';
 import { AuthService } from './auth.service';
+import { LoginAttemptService } from './login-attempt.service';
 import { TokenService } from './token.service';
 
 @Module({
@@ -16,6 +17,7 @@ import { TokenService } from './token.service';
   providers: [
     AuthService,
     TokenService,
+    LoginAttemptService,
     // 전역 가드: 모든 API 에 로그인·권한 검사를 적용한다 (기본이 잠금, 열 곳만 @Public)
     { provide: APP_GUARD, useClass: AuthGuard },
   ],

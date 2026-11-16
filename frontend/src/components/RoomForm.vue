@@ -16,7 +16,10 @@ const endDate = ref(props.initial ? isoToLocalInput(props.initial.endDate) : '')
 
 // 시작 < 종료 같은 업무 규칙은 서버가 최종 검사하고, 여기서는 빈 값·형식만 확인한다.
 const required = (v: unknown) => (v !== '' && v !== null && v !== undefined) || '필수 입력입니다.'
-const positive = (v: number) => Number(v) >= 1 || '1명 이상이어야 합니다.'
+const MAX_PERSONNEL = 500
+const personnelRange = (v: number) =>
+  (Number(v) >= 1 && Number(v) <= MAX_PERSONNEL) ||
+  `1명 이상 ${MAX_PERSONNEL}명 이하로 입력해 주세요.`
 
 async function onSubmit(event: SubmitEventPromise) {
   const { valid } = await event
@@ -42,8 +45,9 @@ async function onSubmit(event: SubmitEventPromise) {
           label="최대 인원"
           type="number"
           min="1"
+          :max="MAX_PERSONNEL"
           suffix="명"
-          :rules="[required, positive]"
+          :rules="[required, personnelRange]"
         />
       </v-col>
       <v-col cols="12" sm="6">

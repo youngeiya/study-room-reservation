@@ -13,6 +13,7 @@ import { STUDENT_COLLECTION, Student } from '../student/student.entity';
 import { StudentService } from '../student/student.service';
 import { VISIT_COLLECTION, VisitReservation } from '../visit/visit.entity';
 import { AuthService } from './auth.service';
+import { LoginAttemptService } from './login-attempt.service';
 import { hashPassword, verifyPassword } from './password';
 import { TokenService } from './token.service';
 
@@ -84,6 +85,7 @@ describe('AuthService', () => {
       new TokenService(),
       db,
       clock,
+      new LoginAttemptService(clock),
     );
   });
 
@@ -249,5 +251,109 @@ describe('AuthService', () => {
     await expect(
       auth.login('STUDENT', 'OLD-1', 'OLD-1'),
     ).resolves.toBeDefined();
+  });
+});
+
+describe('로그인 시도 제한', () => {
+  let dir: string;
+  let db: JsonDatabase;
+  let auth: AuthService;
+  let students: StudentService;
+  let nowMs: number;
+
+  beforeEach(async () => {
+    delete process.env.LOGIN_MAX_ATTEMPTS;
+    delete process.env.LOGIN_LOCK_MINUTES;
+    delete process.env.INSTRUCTOR_ID;
+    delete process.env.INSTRUCTOR_PASSWORD;
+    dir = await mkdtemp(join(tmpdir(), 'lock-'));
+    db = new JsonDatabase(join(dir, 'db.json'));
+    await db.init();
+    nowMs = Date.parse('2026-11-24T00:00:00.000Z');
+    const clock = { now: () => new Date(nowMs) } as Clock; // 시각을 직접 움직인다
+    const instructorRepo = db.repository<Instructor>(INSTRUCTOR_COLLECTION);
+    const studentRepo = db.repository<Student>(STUDENT_COLLECTION);
+    const visitRepo = db.repository<VisitReservation>(VISIT_COLLECTION);
+    await new InstructorService(instructorRepo, db, clock).onModuleInit();
+    students = new StudentService(studentRepo, visitRepo, db, clock);
+    await students.onModuleInit();
+    auth = new AuthService(
+      instructorRepo,
+      studentRepo,
+      new TokenService(),
+      db,
+      clock,
+      new LoginAttemptService(clock),
+    );
+  });
+
+  afterEach(() => rm(dir, { recursive: true, force: true }));
+
+  const fail = (id = '2026001') =>
+    auth.login('STUDENT', id, 'wrong').catch((e) => e);
+
+  it('연속 5번 실패하면 올바른 비밀번호로도 잠겨서 로그인할 수 없다', async () => {
+    for (let i = 0; i < 5; i++) {
+      expect(await fail()).toMatchObject({ code: 'INVALID_CREDENTIALS' });
+    }
+    const locked = await auth
+      .login('STUDENT', '2026001', '2026001')
+      .catch((e) => e);
+    expect(locked).toMatchObject({
+      code: 'TOO_MANY_LOGIN_ATTEMPTS',
+      data: { retryAfterSeconds: 300 },
+    });
+  });
+
+  it('4번 실패한 뒤 성공하면 횟수가 지워진다', async () => {
+    for (let i = 0; i < 4; i++) await fail();
+    await expect(
+      auth.login('STUDENT', '2026001', '2026001'),
+    ).resolves.toBeDefined();
+    for (let i = 0; i < 4; i++) await fail(); // 다시 4번까지는 잠기지 않는다
+    await expect(
+      auth.login('STUDENT', '2026001', '2026001'),
+    ).resolves.toBeDefined();
+  });
+
+  it('5분이 지나면 잠금이 풀린다', async () => {
+    for (let i = 0; i < 5; i++) await fail();
+    nowMs += 4 * 60_000;
+    expect(await fail()).toMatchObject({ code: 'TOO_MANY_LOGIN_ATTEMPTS' });
+    nowMs += 61_000; // 잠긴 지 5분 1초 뒤
+    await expect(
+      auth.login('STUDENT', '2026001', '2026001'),
+    ).resolves.toBeDefined();
+  });
+
+  it('다른 계정과 다른 역할은 영향받지 않는다', async () => {
+    for (let i = 0; i < 5; i++) await fail('2026001');
+    await expect(
+      auth.login('STUDENT', '2026002', '2026002'),
+    ).resolves.toBeDefined();
+    await expect(
+      auth.login('INSTRUCTOR', 'admin', 'admin1234'),
+    ).resolves.toBeDefined();
+  });
+
+  it('없는 아이디도 똑같이 세어서, 잠금 여부로 존재 여부를 알 수 없다', async () => {
+    for (let i = 0; i < 5; i++) await fail('9999999');
+    expect(await fail('9999999')).toMatchObject({
+      code: 'TOO_MANY_LOGIN_ATTEMPTS',
+    });
+  });
+
+  it('대소문자·공백을 바꿔도 제한을 피할 수 없고, 한도·시간은 환경 변수로 바꾼다', async () => {
+    process.env.LOGIN_MAX_ATTEMPTS = '2';
+    process.env.LOGIN_LOCK_MINUTES = '1';
+    await auth.login('INSTRUCTOR', 'ADMIN', 'wrong').catch(() => undefined);
+    await auth.login('INSTRUCTOR', ' admin ', 'wrong').catch(() => undefined);
+    const locked = await auth
+      .login('INSTRUCTOR', 'Admin', 'admin1234')
+      .catch((e) => e);
+    expect(locked).toMatchObject({
+      code: 'TOO_MANY_LOGIN_ATTEMPTS',
+      data: { retryAfterSeconds: 60 },
+    });
   });
 });

@@ -323,6 +323,47 @@ describe('로그인과 권한 (e2e)', () => {
     });
   });
 
+  describe('입력 상한과 로그인 시도 제한', () => {
+    it('최대 인원이 500명을 넘거나, 이미 종료된 기간으로 자습실을 등록하면 400', async () => {
+      const t = bearer(instructor);
+      const tooMany = await api()
+        .post('/api/study-rooms')
+        .set(t)
+        .send({
+          name: 'x',
+          maxPersonnel: 501,
+          startDate: iso(0),
+          endDate: iso(5),
+        });
+      expect(tooMany.status).toBe(400);
+      expect(tooMany.body.code).toBe('VALIDATION_FAILED');
+
+      const ended = await api()
+        .post('/api/study-rooms')
+        .set(t)
+        .send({
+          name: 'x',
+          maxPersonnel: 5,
+          startDate: iso(-10),
+          endDate: iso(-1),
+        });
+      expect(ended.status).toBe(400);
+      expect(ended.body.code).toBe('ROOM_ALREADY_ENDED');
+    });
+
+    it('같은 계정으로 5번 연속 실패하면 429, 올바른 비밀번호로도 잠긴다 (다른 계정은 영향 없음)', async () => {
+      for (let i = 0; i < 5; i++) {
+        expect((await login('STUDENT', '2026005', 'wrong')).status).toBe(401);
+      }
+      const locked = await login('STUDENT', '2026005', '2026005');
+      expect(locked.status).toBe(429);
+      expect(locked.body.code).toBe('TOO_MANY_LOGIN_ATTEMPTS');
+      expect(locked.body.data.retryAfterSeconds).toBeGreaterThan(0);
+
+      expect((await login('STUDENT', '2026004', '2026004')).status).toBe(200);
+    });
+  });
+
   describe('비밀번호 변경', () => {
     it('현재 비밀번호가 틀리면 400, 맞으면 바뀌고 새 비밀번호로만 로그인된다', async () => {
       const t = bearer(student2);

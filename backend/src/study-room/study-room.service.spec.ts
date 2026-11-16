@@ -77,6 +77,71 @@ describe('StudyRoomService', () => {
     expect(await service.findAll()).toHaveLength(0);
   });
 
+  describe('종료된 기간과 입력 상한', () => {
+    const DAY = 24 * 60 * 60 * 1000;
+    const nowMs = Date.parse(NOW);
+    const at = (offsetMs: number) => new Date(nowMs + offsetMs).toISOString();
+
+    it('종료 일시가 이미 지난 자습실은 등록할 수 없고, 지금 이후면 등록된다', async () => {
+      await expect(
+        service.create({ ...base, startDate: at(-10 * DAY), endDate: at(-1) }),
+      ).rejects.toMatchObject({ code: 'ROOM_ALREADY_ENDED' });
+      await expect(
+        service.create({ ...base, startDate: at(-10 * DAY), endDate: at(0) }),
+      ).resolves.toBeDefined(); // 종료가 지금과 같으면 허용 (경계)
+    });
+
+    it('종료 일시를 과거로 바꾸는 수정은 거부하지만, 이미 끝난 자습실의 이름 수정은 허용한다', async () => {
+      const room = await service.create({
+        ...base,
+        startDate: at(-10 * DAY),
+        endDate: at(5 * DAY),
+      });
+      await expect(
+        service.update(room.id, { endDate: at(-1) }),
+      ).rejects.toMatchObject({ code: 'ROOM_ALREADY_ENDED' });
+
+      // 이미 끝난 자습실(시드로 직접 만든 것처럼)의 다른 정보 수정은 막지 않는다
+      const ended = await db.transaction(() =>
+        rooms.create({
+          name: '끝난 자습실',
+          maxPersonnel: 3,
+          currentCount: 0,
+          startDate: at(-20 * DAY),
+          endDate: at(-10 * DAY),
+          createdAt: NOW,
+          updatedAt: NOW,
+          deletedAt: null,
+        }),
+      );
+      await expect(
+        service.update(ended.id, { name: '이름만 변경' }),
+      ).resolves.toMatchObject({ name: '이름만 변경' });
+    });
+
+    it('운영 기간은 최대 366일까지, 그보다 길면 PERIOD_TOO_LONG', async () => {
+      await expect(
+        service.create({ ...base, startDate: at(0), endDate: at(366 * DAY) }),
+      ).resolves.toBeDefined();
+      await expect(
+        service.create({
+          ...base,
+          startDate: at(0),
+          endDate: at(366 * DAY + 1),
+        }),
+      ).rejects.toMatchObject({ code: 'PERIOD_TOO_LONG' });
+
+      const room = await service.create({
+        ...base,
+        startDate: at(0),
+        endDate: at(10 * DAY),
+      });
+      await expect(
+        service.update(room.id, { endDate: at(400 * DAY) }),
+      ).rejects.toMatchObject({ code: 'PERIOD_TOO_LONG' });
+    });
+  });
+
   it('시작이 종료보다 늦거나 같으면 등록할 수 없다', async () => {
     await expect(
       service.create({ ...base, startDate: base.endDate }),

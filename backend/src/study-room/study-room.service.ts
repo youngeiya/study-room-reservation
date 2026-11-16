@@ -14,6 +14,9 @@ const SEED_ROOMS = [
   { name: '부엉이 라이브러리 2관', maxPersonnel: 10 },
   { name: '부엉이 라이브러리 3관 (소수 정예)', maxPersonnel: 5 },
 ];
+// 운영 기간 최대 길이(일). 입력 실수 방지용 상한
+const MAX_PERIOD_DAYS = 366;
+
 // 예시 자습실의 운영 기간: 어제부터 30일 뒤까지 (언제 실행해도 바로 신청해 볼 수 있게 현재 시각 기준)
 const SEED_PERIOD_BEFORE_DAYS = 1;
 const SEED_PERIOD_AFTER_DAYS = 30;
@@ -82,6 +85,7 @@ export class StudyRoomService implements OnModuleInit {
     const startDate = this.toIso(dto.startDate);
     const endDate = this.toIso(dto.endDate);
     this.assertValidPeriod(startDate, endDate);
+    this.assertNotEnded(endDate); // 이미 끝난 기간으로는 새 자습실을 만들 수 없다
 
     const now = this.clock.now().toISOString();
     // 쓰기는 트랜잭션 안에서. 콜백이 반환한 값(저장된 자습실)이 그대로 결과가 된다.
@@ -121,6 +125,8 @@ export class StudyRoomService implements OnModuleInit {
       };
       // 일부만 수정해도 합쳐진 결과(next)로 시작 < 종료 를 검사해야 한다
       this.assertValidPeriod(next.startDate, next.endDate);
+      // 종료 일시를 바꾸는 경우에만 검사한다 (이미 끝난 자습실의 이름 등 다른 정보는 계속 수정할 수 있게)
+      if (dto.endDate) this.assertNotEnded(next.endDate);
 
       // 규칙 1) 최대 인원을 현재 신청 수보다 작게 줄일 수 없다 (같은 값까지는 허용)
       if (next.maxPersonnel < room.currentCount) {
@@ -174,6 +180,20 @@ export class StudyRoomService implements OnModuleInit {
   // 시작이 종료보다 빨라야 한다. (같아도 안 됨)
   private assertValidPeriod(startDate: string, endDate: string) {
     if (startDate >= endDate) throw new BusinessException('INVALID_PERIOD');
+    // 터무니없이 긴 운영 기간(입력 실수)을 막는다
+    if (
+      Date.parse(endDate) - Date.parse(startDate) >
+      MAX_PERIOD_DAYS * DAY_MS
+    ) {
+      throw new BusinessException('PERIOD_TOO_LONG');
+    }
+  }
+
+  // 종료 일시가 지금보다 과거인 자습실은 아무도 신청할 수 없으므로 만들지 않는다
+  private assertNotEnded(endDate: string) {
+    if (Date.parse(endDate) < this.clock.now().getTime()) {
+      throw new BusinessException('ROOM_ALREADY_ENDED');
+    }
   }
 
   /** 입력(타임존이 섞여 있을 수 있음)을 UTC ISO 문자열 하나로 통일한다. */

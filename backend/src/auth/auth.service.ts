@@ -9,6 +9,7 @@ import { Database } from '../storage/database';
 import type { Repository } from '../storage/repository';
 import { STUDENT_REPOSITORY, Student } from '../student/student.entity';
 import type { AuthUser, Role } from './auth.types';
+import { LoginAttemptService } from './login-attempt.service';
 import { hashPassword, verifyPassword } from './password';
 import { TokenService } from './token.service';
 
@@ -33,6 +34,7 @@ export class AuthService {
     private readonly tokens: TokenService,
     private readonly db: Database,
     private readonly clock: Clock,
+    private readonly attempts: LoginAttemptService,
   ) {}
 
   async login(
@@ -40,6 +42,9 @@ export class AuthService {
     loginId: string,
     password: string,
   ): Promise<LoginResult> {
+    // 이 계정이 잠겨 있으면 비밀번호를 확인하기 전에 거부한다 (무차별 대입 방어)
+    this.attempts.assertNotLocked(role, loginId);
+
     const account = await this.findAccount(role, loginId.trim());
     // 계정이 없을 때도 같은 시간만큼 해시를 계산한다.
     // 응답 시간 차이로 "이 아이디는 존재한다"를 알아내는 것을 어렵게 하려는 것.
@@ -47,7 +52,11 @@ export class AuthService {
       ? await verifyPassword(password, account.passwordHash)
       : (await hashPassword(password), false);
     // 아이디가 없는지 비밀번호가 틀렸는지 알려 주지 않는다 (같은 메시지)
-    if (!account || !ok) throw new BusinessException('INVALID_CREDENTIALS');
+    if (!account || !ok) {
+      this.attempts.recordFailure(role, loginId); // 연속 실패를 센다 (없는 아이디도 똑같이)
+      throw new BusinessException('INVALID_CREDENTIALS');
+    }
+    this.attempts.recordSuccess(role, loginId);
 
     const user = account.user;
     return { token: this.tokens.sign(user), user };
