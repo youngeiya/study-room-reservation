@@ -33,7 +33,8 @@ function logout() {
 <template>
   <v-app-bar color="surface" flat height="72" class="site-header">
     <v-container class="d-flex align-center" style="max-width: 1100px">
-      <BrandLogo :width="96" class="me-3" />
+      <BrandLogo :height="46" class="me-2" />
+      <span class="brand-name me-3">부엉이 라이브러리</span>
       <span class="site-divider me-3" />
       <span class="sub-title">{{ title }}</span>
 

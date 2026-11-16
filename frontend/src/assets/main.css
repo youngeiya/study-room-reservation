@@ -60,10 +60,23 @@ body,
 .site-header .nav-link .v-btn__overlay {
   display: none;
 }
+.site-header .brand-name {
+  font-size: 1.15rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  white-space: nowrap;
+}
 .site-header .sub-title {
   color: #b5b5b5;
   font-size: 1.05rem;
   letter-spacing: 0.04em;
+}
+/* 좁은 화면(모바일)에서는 로고와 이름만 남기고 보조 제목은 숨긴다 */
+@media (max-width: 600px) {
+  .site-header .sub-title,
+  .site-divider {
+    display: none;
+  }
 }
 .site-divider {
   width: 1px;

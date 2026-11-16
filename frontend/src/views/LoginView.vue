@@ -38,7 +38,7 @@ async function submit(event: SubmitEventPromise) {
     <!-- 시대인재 홈페이지처럼 상자 없이 흰 바탕에 왼쪽 정렬 -->
     <div style="width: 100%; max-width: 400px" class="mx-4">
       <div class="mb-8">
-        <BrandLogo :width="130" class="mb-6" />
+        <BrandLogo :height="96" class="mb-5" />
         <h1 class="text-h5">부엉이 라이브러리</h1>
         <div class="text-body-1 mt-1" style="color: #8a8a8a">Study Room Reservation</div>
       </div>
