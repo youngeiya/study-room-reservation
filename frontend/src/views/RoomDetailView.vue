@@ -21,15 +21,16 @@ const { error, errorCode, busy, run } = useAction()
 const roomId = computed(() => Number(route.params.id))
 const room = ref<StudyRoom | null>(null)
 const histories = ref<VisitHistory[]>([]) // 강사에게만 보여 준다
-const myVisit = ref<VisitView | null>(null) // 이 자습실에 대한 내 신청 (학생)
+// 이 자습실에 대한 내 활성 신청들 (학생). 하루에 한 건이라 날짜가 다르면 여러 건일 수 있다.
+const myVisits = ref<VisitView[]>([])
 
 const editingRoom = ref(false) // 강사: 자습실 수정 폼 표시
-const editingVisit = ref(false) // 학생: 시간 수정 입력 표시
-const visitInput = ref('') // 신청·수정에 쓰는 datetime-local 값
+const editingVisitId = ref<number | null>(null) // 학생: 시간을 수정 중인 신청의 번호
+const visitInput = ref('') // 시간 수정에 쓰는 datetime-local 값
+const applyInput = ref('') // 새 신청에 쓰는 datetime-local 값
 
 const isDeleted = computed(() => room.value?.deletedAt != null)
 const isFull = computed(() => !!room.value && isRoomFull(room.value))
-const activeVisit = computed(() => (myVisit.value?.status === 'ACTIVE' ? myVisit.value : null))
 
 // 예약 가능 기간(서버 정책): 지금부터 며칠 이내. 화면은 안내와 입력 범위 제한만 하고, 최종 검사는 서버가 한다.
 const maxDaysAhead = ref(3)
@@ -71,7 +72,9 @@ async function load() {
       histories.value = await api.listHistories(roomId.value) // FR-ROM-03
     } else if (session.studentId !== null) {
       const mine = await api.listStudentVisits(session.studentId)
-      myVisit.value = mine.find((v) => v.roomId === roomId.value) ?? null
+      myVisits.value = mine
+        .filter((v) => v.roomId === roomId.value && v.status === 'ACTIVE')
+        .sort((a, b) => a.visitAt.localeCompare(b.visitAt))
     }
   })
 }
@@ -127,13 +130,13 @@ async function removeImage() {
 // ── 학생 ──
 // FR-VST-01: 방문 신청 (운영 기간·정원·중복 검사는 서버가 한다)
 async function apply() {
-  if (session.studentId === null || !visitInput.value) return
+  if (session.studentId === null || !applyInput.value) return
   const created = await run(() =>
     // 누가 신청하는지는 서버가 로그인 정보(토큰)로 알아낸다 - 학생 번호를 보내지 않는다
-    api.createVisit(roomId.value, { visitAt: localInputToIso(visitInput.value) }),
+    api.createVisit(roomId.value, { visitAt: localInputToIso(applyInput.value) }),
   )
   if (created) {
-    visitInput.value = ''
+    applyInput.value = ''
     await load()
   } else if (errorCode.value === 'ROOM_FULL') {
     // 정원 초과는 눈에 띄게 경고창으로 알린다. (판단은 서버가 하고, 화면은 그 결과를 알려 줄 뿐)
@@ -145,30 +148,30 @@ async function apply() {
   }
 }
 
-function startEditVisit() {
-  if (!myVisit.value) return
-  visitInput.value = isoToLocalInput(myVisit.value.visitAt)
-  editingVisit.value = true
+function startEditVisit(visit: VisitView) {
+  visitInput.value = isoToLocalInput(visit.visitAt)
+  editingVisitId.value = visit.id
 }
 
-// FR-VST-02: 방문 시간 수정
-async function saveVisit() {
-  const visit = activeVisit.value
-  if (!visit) return
+function closeEdit() {
+  editingVisitId.value = null
+  visitInput.value = ''
+}
+
+// FR-VST-02: 방문 시간 수정 (옮기려는 날짜에 다른 신청이 있으면 서버가 거부한다)
+async function saveVisit(visit: VisitView) {
   const updated = await run(() =>
     api.updateVisit(visit.id, { visitAt: localInputToIso(visitInput.value) }),
   )
   if (updated) {
-    editingVisit.value = false
-    visitInput.value = ''
+    closeEdit()
     await load()
   }
 }
 
 // FR-VST-03: 방문 취소
-async function cancelVisit() {
-  const visit = activeVisit.value
-  if (!visit || !confirm('방문 신청을 취소할까요?')) return
+async function cancelVisit(visit: VisitView) {
+  if (!confirm('방문 신청을 취소할까요?')) return
   const cancelled = await run(() => api.cancelVisit(visit.id))
   if (cancelled) await load()
 }
@@ -262,14 +265,14 @@ async function cancelVisit() {
       </v-expand-transition>
     </v-card>
 
-    <!-- 학생: 신청 / 수정 / 취소 -->
+    <!-- 학생: 신청 / 수정 / 취소 (하루에 한 건, 날짜가 다르면 이 자습실에도 여러 건 가능) -->
     <v-card v-if="!session.isInstructor" class="mb-4" title="내 방문 신청">
       <v-card-text>
-        <template v-if="activeVisit">
-          <p class="mb-4">
-            방문 시간: <strong>{{ formatDateTime(activeVisit.visitAt) }}</strong>
+        <div v-for="visit in myVisits" :key="visit.id" class="mb-4">
+          <p class="mb-2">
+            방문 시간: <strong>{{ formatDateTime(visit.visitAt) }}</strong>
           </p>
-          <div v-if="editingVisit" class="d-flex flex-wrap ga-2 align-start">
+          <div v-if="editingVisitId === visit.id" class="d-flex flex-wrap ga-2 align-start">
             <v-text-field
               v-model="visitInput"
               type="datetime-local"
@@ -280,45 +283,52 @@ async function cancelVisit() {
               persistent-hint
               style="max-width: 280px"
             />
-            <v-btn color="primary" height="48" :disabled="busy || !visitInput" @click="saveVisit"
+            <v-btn
+              color="primary"
+              height="48"
+              :disabled="busy || !visitInput"
+              @click="saveVisit(visit)"
               >저장</v-btn
             >
-            <v-btn variant="text" height="48" @click="editingVisit = false">닫기</v-btn>
+            <v-btn variant="text" height="48" @click="closeEdit">닫기</v-btn>
           </div>
           <div v-else class="d-flex ga-2">
-            <v-btn variant="tonal" color="primary" :disabled="isDeleted" @click="startEditVisit">
+            <v-btn
+              variant="tonal"
+              color="primary"
+              :disabled="isDeleted"
+              @click="startEditVisit(visit)"
+            >
               시간 수정
             </v-btn>
-            <v-btn variant="text" color="error" :disabled="busy" @click="cancelVisit"
+            <v-btn variant="text" color="error" :disabled="busy" @click="cancelVisit(visit)"
               >신청 취소</v-btn
             >
           </div>
-        </template>
+        </div>
 
-        <template v-else>
-          <v-alert v-if="myVisit" type="info" variant="tonal" density="compact" class="mb-4">
-            이전 신청은 취소되었습니다. 다시 신청할 수 있어요.
-          </v-alert>
-          <v-alert v-if="isDeleted" type="warning" variant="tonal" density="compact">
-            삭제된 자습실에는 신청할 수 없습니다.
-          </v-alert>
-          <form v-else class="d-flex flex-wrap ga-2 align-start" @submit.prevent="apply">
-            <v-text-field
-              v-model="visitInput"
-              type="datetime-local"
-              label="방문 시간"
-              :min="minInput"
-              :max="maxInput"
-              :hint="bookingHint"
-              persistent-hint
-              style="max-width: 280px"
-            />
-            <!-- 정원이 차 있어도 누를 수 있게 둔다: 누르면 서버가 ROOM_FULL 로 거부하고 경고창을 띄운다 -->
-            <v-btn type="submit" color="primary" height="48" :disabled="busy || !visitInput"
-              >신청</v-btn
-            >
-          </form>
-        </template>
+        <v-divider v-if="myVisits.length > 0" class="mb-4" />
+
+        <v-alert v-if="isDeleted" type="warning" variant="tonal" density="compact">
+          삭제된 자습실에는 신청할 수 없습니다.
+        </v-alert>
+        <form v-else class="d-flex flex-wrap ga-2 align-start" @submit.prevent="apply">
+          <v-text-field
+            v-model="applyInput"
+            type="datetime-local"
+            :label="myVisits.length > 0 ? '다른 날짜에 추가 신청' : '방문 시간'"
+            :min="minInput"
+            :max="maxInput"
+            :hint="bookingHint"
+            persistent-hint
+            style="max-width: 280px"
+          />
+          <!-- 정원이 차 있어도 누를 수 있게 둔다: 누르면 서버가 ROOM_FULL 로 거부하고 경고창을 띄운다 -->
+          <v-btn type="submit" color="primary" height="48" :disabled="busy || !applyInput"
+            >신청</v-btn
+          >
+        </form>
+        <p class="text-caption text-medium-emphasis mt-2">하루에 한 건만 신청할 수 있어요.</p>
       </v-card-text>
     </v-card>
 
