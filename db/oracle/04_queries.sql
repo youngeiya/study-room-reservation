@@ -135,6 +135,23 @@ UPDATE student
  WHERE id = :student_id AND version = :student_version AND deleted_at IS NULL;
 
 -- ---------------------------------------------------------------------
+-- [로그인] 역할(강사/학생)에 따라 조회하는 테이블이 다르다. 비밀번호 해시는 앱에서 scrypt 로 비교한다 (SQL 로 비교하지 않음).
+-- 아이디가 없든 비밀번호가 틀리든 같은 오류로 응답한다.
+-- ---------------------------------------------------------------------
+-- 강사 로그인
+SELECT id, login_id, password_hash, name FROM instructor WHERE login_id = :login_id;
+
+-- 학생 로그인: 로그인 아이디는 학번. 삭제된 학생은 제외한다 (퇴원 학생 여부는 앱에서 status 로 거른다)
+SELECT id, student_no, password_hash, name, status
+  FROM student
+ WHERE student_no = :student_no AND deleted_at IS NULL;
+
+-- 비밀번호 변경 (낙관적 락)
+UPDATE student
+   SET password_hash = :password_hash, version = version + 1, updated_at = SYS_EXTRACT_UTC(SYSTIMESTAMP)
+ WHERE id = :student_id AND version = :student_version;
+
+-- ---------------------------------------------------------------------
 -- [점검] 카운터 불변식: 저장된 current_count 가 실제 활성 신청 수와 같아야 한다 (결과가 0 행이면 정상)
 -- ---------------------------------------------------------------------
 SELECT r.id, r.current_count, COUNT(v.id) AS actual_active

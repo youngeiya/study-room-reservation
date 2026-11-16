@@ -20,6 +20,7 @@ CREATE TABLE student (
   name            VARCHAR2(30 CHAR)                      NOT NULL,
   phone           VARCHAR2(20)                           NOT NULL,
   student_no      VARCHAR2(20),
+  password_hash   VARCHAR2(200),
   guardian_phone  VARCHAR2(20),
   grade           VARCHAR2(10 CHAR),
   memo            VARCHAR2(200 CHAR),
@@ -39,8 +40,26 @@ CREATE UNIQUE INDEX uq_student_no_active
 COMMENT ON TABLE  student                IS '학생';
 COMMENT ON COLUMN student.version        IS '낙관적 락 버전 (수정될 때마다 +1)';
 COMMENT ON COLUMN student.student_no     IS '학번(수강번호). 삭제되지 않은 학생끼리 중복 불가';
+COMMENT ON COLUMN student.password_hash   IS '비밀번호 해시(scrypt). 원문은 저장하지 않는다. 학생 로그인 아이디는 student_no';
 COMMENT ON COLUMN student.status         IS '재원 상태: ENROLLED 재원 / ON_LEAVE 휴원 / WITHDRAWN 퇴원';
 COMMENT ON COLUMN student.deleted_at     IS 'Soft Delete (NULL = 삭제되지 않음)';
+
+-- ---------------------------------------------------------------------
+-- 강사 (로그인 계정). 로그인 아이디는 중복 불가.
+-- ---------------------------------------------------------------------
+CREATE TABLE instructor (
+  id             NUMBER GENERATED ALWAYS AS IDENTITY,
+  version        NUMBER(10)         DEFAULT 0 NOT NULL,
+  login_id       VARCHAR2(50)                 NOT NULL,
+  password_hash  VARCHAR2(200)                NOT NULL,
+  name           VARCHAR2(30 CHAR)            NOT NULL,
+  created_at     TIMESTAMP(3)       DEFAULT SYS_EXTRACT_UTC(SYSTIMESTAMP) NOT NULL,
+  updated_at     TIMESTAMP(3)       DEFAULT SYS_EXTRACT_UTC(SYSTIMESTAMP) NOT NULL,
+  CONSTRAINT pk_instructor PRIMARY KEY (id),
+  CONSTRAINT uq_instructor_login_id UNIQUE (login_id)
+);
+
+COMMENT ON TABLE instructor IS '강사 로그인 계정';
 
 -- ---------------------------------------------------------------------
 -- 자습실

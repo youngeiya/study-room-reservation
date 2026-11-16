@@ -51,6 +51,7 @@ const TABLES: TableSpec[] = [
       s('name', 'name'),
       s('phone', 'phone'),
       s('studentNo', 'student_no'),
+      s('passwordHash', 'password_hash'),
       s('guardianPhone', 'guardian_phone'),
       s('grade', 'grade'),
       s('memo', 'memo'),
@@ -60,6 +61,19 @@ const TABLES: TableSpec[] = [
       t('deletedAt', 'deleted_at'),
     ],
     uniques: { UQ_STUDENT_NO_ACTIVE: 'studentNo' },
+  },
+  {
+    collection: 'instructors',
+    table: 'INSTRUCTOR',
+    versioned: true,
+    columns: [
+      s('loginId', 'login_id'),
+      s('passwordHash', 'password_hash'),
+      s('name', 'name'),
+      t('createdAt', 'created_at'),
+      t('updatedAt', 'updated_at'),
+    ],
+    uniques: {},
   },
   {
     collection: 'studyRooms',
