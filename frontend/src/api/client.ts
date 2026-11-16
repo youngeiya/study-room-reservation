@@ -30,13 +30,15 @@ export async function request<T>(method: Method, path: string, body?: unknown): 
   try {
     // 로그인했다면 모든 요청에 토큰을 실어 보낸다 (서버가 "누구의 요청인지" 확인한다)
     const headers: Record<string, string> = {}
-    if (body !== undefined) headers['Content-Type'] = 'application/json'
+    // 파일 업로드(FormData)는 브라우저가 Content-Type(boundary 포함)을 알아서 정한다
+    const isForm = body instanceof FormData
+    if (body !== undefined && !isForm) headers['Content-Type'] = 'application/json'
     const token = getToken()
     if (token) headers.Authorization = `Bearer ${token}`
     res = await fetch(`/api${path}`, {
       method,
       headers,
-      body: body === undefined ? undefined : JSON.stringify(body),
+      body: body === undefined ? undefined : isForm ? body : JSON.stringify(body),
     })
   } catch {
     throw new ApiError(

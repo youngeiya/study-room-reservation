@@ -31,6 +31,14 @@ export const api = {
     request<StudyRoom>('PATCH', `/study-rooms/${id}`, body),
   deleteRoom: (id: number) => request<null>('DELETE', `/study-rooms/${id}`),
 
+  // 자습실 사진 (파일은 서버가 SeaweedFS 에 저장한다)
+  uploadRoomImage: (id: number, file: File) => {
+    const form = new FormData()
+    form.append('file', file)
+    return request<StudyRoom>('POST', `/study-rooms/${id}/image`, form)
+  },
+  deleteRoomImage: (id: number) => request<StudyRoom>('DELETE', `/study-rooms/${id}/image`),
+
   // 학생
   listStudents: () => request<Student[]>('GET', '/students'),
   createStudent: (body: StudentPayload) => request<Student>('POST', '/students', body),

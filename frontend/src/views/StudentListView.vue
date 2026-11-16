@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
 import type { SubmitEventPromise } from 'vuetify'
-import { mdiDelete, mdiPencil, mdiPlus } from '@mdi/js'
+import { mdiDelete, mdiMagnify, mdiPencil, mdiPlus } from '@mdi/js'
 import { api } from '@/api'
 import type { Student, StudentPayload, StudentStatus } from '@/api/types'
+import AddressSearchDialog from '@/components/AddressSearchDialog.vue'
 import { useAction } from '@/composables/useAction'
 
 // FR-STD-01: 학생 목록 / FR-STD-02: 학생 등록·수정·삭제 (강사 전용 화면)
@@ -35,6 +36,9 @@ const form = ref({
   studentNo: '',
   password: '',
   guardianPhone: '',
+  zipCode: '',
+  address: '',
+  addressDetail: '',
   grade: null as string | null,
   memo: '',
   status: 'ENROLLED' as StudentStatus,
@@ -55,6 +59,9 @@ function openCreate() {
     studentNo: '',
     password: '',
     guardianPhone: '',
+    zipCode: '',
+    address: '',
+    addressDetail: '',
     grade: null,
     memo: '',
     status: 'ENROLLED',
@@ -70,11 +77,21 @@ function openEdit(student: Student) {
     studentNo: student.studentNo ?? '',
     password: '', // 수정할 때는 비워 두면 비밀번호를 바꾸지 않는다
     guardianPhone: student.guardianPhone ?? '',
+    zipCode: student.zipCode ?? '',
+    address: student.address ?? '',
+    addressDetail: student.addressDetail ?? '',
     grade: student.grade,
     memo: student.memo ?? '',
     status: student.status,
   }
   showForm.value = true
+}
+
+// 주소 검색 팝업에서 고른 주소를 폼에 채운다 (상세주소는 직접 입력)
+const showAddressSearch = ref(false)
+function applyAddress(item: { zipCode: string; address: string }) {
+  form.value.zipCode = item.zipCode
+  form.value.address = item.address
 }
 
 async function reload() {
@@ -94,6 +111,9 @@ async function save(event: SubmitEventPromise) {
     phone: f.phone.trim(),
     studentNo: f.studentNo.trim(),
     guardianPhone: f.guardianPhone.trim() || null,
+    zipCode: f.zipCode.trim() || null,
+    address: f.address.trim() || null,
+    addressDetail: f.addressDetail.trim() || null,
     grade: f.grade || null,
     memo: f.memo.trim() || null,
     // 비밀번호는 입력했을 때만 보낸다 (등록: 초기 비밀번호, 수정: 재설정). 비우면 등록은 학번, 수정은 그대로
@@ -186,6 +206,40 @@ async function remove(student: Student) {
                 persistent-hint
               />
             </v-col>
+            <v-col cols="12" sm="4">
+              <v-text-field v-model="form.zipCode" label="우편번호" readonly hide-details="auto" />
+            </v-col>
+            <v-col cols="12" sm="8">
+              <v-text-field
+                v-model="form.address"
+                label="주소 (선택)"
+                placeholder="주소 검색 버튼을 눌러 주세요"
+                readonly
+                hide-details="auto"
+                @click="showAddressSearch = true"
+              >
+                <template #append-inner>
+                  <v-btn
+                    size="small"
+                    variant="tonal"
+                    color="primary"
+                    :prepend-icon="mdiMagnify"
+                    @click.stop="showAddressSearch = true"
+                  >
+                    주소 검색
+                  </v-btn>
+                </template>
+              </v-text-field>
+            </v-col>
+            <v-col cols="12">
+              <v-text-field
+                v-model="form.addressDetail"
+                label="상세주소 (선택)"
+                placeholder="동·호수 등"
+                maxlength="100"
+                :disabled="!form.address"
+              />
+            </v-col>
             <v-col cols="12">
               <v-textarea
                 v-model="form.memo"
@@ -208,6 +262,8 @@ async function remove(student: Student) {
     </v-card>
   </v-dialog>
 
+  <AddressSearchDialog v-model="showAddressSearch" @select="applyAddress" />
+
   <v-alert v-if="students.length === 0" type="info" variant="tonal">
     등록된 학생이 없습니다.
   </v-alert>
@@ -219,6 +275,7 @@ async function remove(student: Student) {
           <th>이름</th>
           <th>학년</th>
           <th>연락처</th>
+          <th>주소</th>
           <th>상태</th>
           <th></th>
         </tr>
@@ -238,6 +295,15 @@ async function remove(student: Student) {
             <div v-if="s.guardianPhone" class="text-caption text-medium-emphasis">
               학부모 {{ s.guardianPhone }}
             </div>
+          </td>
+          <td>
+            <template v-if="s.address">
+              <div>{{ s.address }}</div>
+              <div v-if="s.addressDetail" class="text-caption text-medium-emphasis">
+                {{ s.addressDetail }}
+              </div>
+            </template>
+            <span v-else>-</span>
           </td>
           <td>
             <v-chip :color="STATUS_COLOR[s.status]" size="small" variant="tonal">

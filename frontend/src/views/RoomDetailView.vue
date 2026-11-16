@@ -1,7 +1,14 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { mdiArrowLeft, mdiCalendarClock, mdiDelete, mdiPencil } from '@mdi/js'
+import {
+  mdiArrowLeft,
+  mdiCalendarClock,
+  mdiCamera,
+  mdiDelete,
+  mdiImageOff,
+  mdiPencil,
+} from '@mdi/js'
 import { api } from '@/api'
 import type { RoomPayload, StudyRoom, VisitAction, VisitHistory, VisitView } from '@/api/types'
 import RoomForm from '@/components/RoomForm.vue'
@@ -9,7 +16,7 @@ import { useAction } from '@/composables/useAction'
 import { useRouteNames } from '@/composables/useRouteNames'
 import { useSessionStore } from '@/stores/session'
 import { formatDateTime, isoToLocalInput, localInputToIso } from '@/utils/datetime'
-import { isFull as isRoomFull, occupancyColor, occupancyPercent } from '@/utils/room'
+import { isFull as isRoomFull, occupancyColor, occupancyPercent, roomImageUrl } from '@/utils/room'
 
 const route = useRoute()
 const router = useRouter()
@@ -96,6 +103,33 @@ async function removeRoom() {
   if (done) router.push({ name: names.value.rooms })
 }
 
+// 자습실 사진 등록·교체·삭제 (서버가 SeaweedFS 에 저장한다)
+const MAX_IMAGE_MB = 5
+const fileInput = ref<HTMLInputElement | null>(null)
+
+async function onPickImage(event: Event) {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
+  input.value = '' // 같은 파일을 다시 골라도 동작하게 비운다
+  if (!file) return
+  if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
+    error.value = '사진은 JPG, PNG, WEBP 형식만 올릴 수 있습니다.'
+    return
+  }
+  if (file.size > MAX_IMAGE_MB * 1024 * 1024) {
+    error.value = `사진은 ${MAX_IMAGE_MB}MB 이하만 올릴 수 있습니다.`
+    return
+  }
+  const updated = await run(() => api.uploadRoomImage(roomId.value, file))
+  if (updated) room.value = updated
+}
+
+async function removeImage() {
+  if (!confirm('자습실 사진을 삭제할까요?')) return
+  const updated = await run(() => api.deleteRoomImage(roomId.value))
+  if (updated) room.value = updated
+}
+
 // ── 학생 ──
 // FR-VST-01: 방문 신청 (운영 기간·정원·중복 검사는 서버가 한다)
 async function apply() {
@@ -156,6 +190,14 @@ async function cancelVisit() {
   <template v-if="room">
     <!-- 자습실 정보 -->
     <v-card class="mb-4">
+      <v-img v-if="roomImageUrl(room)" :src="roomImageUrl(room)!" height="260" cover />
+      <div
+        v-else
+        class="d-flex align-center justify-center bg-grey-lighten-3 text-medium-emphasis"
+        style="height: 260px"
+      >
+        <v-icon :icon="mdiImageOff" size="40" />
+      </div>
       <v-card-item>
         <template #title>
           <span class="text-h5 font-weight-bold">{{ room.name }}</span>
@@ -186,6 +228,24 @@ async function cancelVisit() {
       </v-card-text>
 
       <v-card-actions v-if="session.isInstructor && !isDeleted">
+        <input
+          ref="fileInput"
+          type="file"
+          accept="image/jpeg,image/png,image/webp"
+          hidden
+          @change="onPickImage"
+        />
+        <v-btn
+          :prepend-icon="mdiCamera"
+          variant="tonal"
+          :loading="busy"
+          @click="fileInput?.click()"
+        >
+          {{ room.imageKey ? '사진 변경' : '사진 올리기' }}
+        </v-btn>
+        <v-btn v-if="room.imageKey" variant="text" :disabled="busy" @click="removeImage">
+          사진 삭제
+        </v-btn>
         <v-btn
           :prepend-icon="mdiPencil"
           variant="tonal"

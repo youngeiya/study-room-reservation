@@ -11,6 +11,8 @@ export interface StudyRoom {
   maxPersonnel: number
   /** 현재 신청 인원(취소 제외) */
   currentCount: number
+  /** 사진의 저장소 경로. 없으면 null (사진 주소는 roomImageUrl 로 만든다) */
+  imageKey?: string | null
   startDate: string
   endDate: string
   createdAt: string
@@ -42,6 +44,9 @@ export interface Student {
   /** 학번 (이전 데이터에는 없을 수 있음) */
   studentNo: string | null
   guardianPhone: string | null
+  zipCode: string | null
+  address: string | null
+  addressDetail: string | null
   grade: string | null
   memo: string | null
   status: StudentStatus
@@ -88,6 +93,9 @@ export interface StudentPayload {
   password?: string
   /** 선택 값은 비우면 null 을 보낸다 (서버가 값을 비운다) */
   guardianPhone: string | null
+  zipCode: string | null
+  address: string | null
+  addressDetail: string | null
   grade: string | null
   memo: string | null
   /** 수정할 때만 보낸다 (등록은 항상 재원) */
