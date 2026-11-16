@@ -71,6 +71,14 @@ export const ErrorCode = {
     message:
       '다른 자습실에 이미 방문을 신청했습니다. 기존 신청을 취소한 뒤 신청해 주세요.',
   },
+  VISIT_IN_PAST: {
+    status: HttpStatus.BAD_REQUEST,
+    message: '이미 지난 시간으로는 신청할 수 없습니다.',
+  },
+  VISIT_TOO_FAR: {
+    status: HttpStatus.BAD_REQUEST,
+    message: '예약 가능한 기간을 벗어났습니다. 가까운 날짜로 신청해 주세요.',
+  },
   OUT_OF_PERIOD: {
     status: HttpStatus.BAD_REQUEST,
     message: '방문 시간이 자습실 운영 기간을 벗어났습니다.',

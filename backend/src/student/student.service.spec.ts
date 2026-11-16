@@ -20,7 +20,7 @@ import { CreateStudentDto } from './dto/create-student.dto';
 import { STUDENT_COLLECTION, Student } from './student.entity';
 import { StudentService } from './student.service';
 
-const NOW = '2026-11-13T00:00:00.000Z';
+const NOW = '2026-11-24T00:00:00.000Z';
 const DAY25 = '2026-11-25T09:00:00.000Z';
 
 describe('StudentService', () => {

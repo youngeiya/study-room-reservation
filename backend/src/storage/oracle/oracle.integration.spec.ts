@@ -228,7 +228,7 @@ const iso = (offsetDays: number) =>
     expect((await rooms.findOne(room.id)).currentCount).toBe(2);
 
     // 시간 수정 → 이력 UPDATE
-    const moved = iso(3);
+    const moved = iso(2.5);
     await visits.update(visit.id, { studentId: a.id, visitAt: moved });
     // 취소 → 인원 -1, 같은 자리에 c 가 신청 가능
     await visits.cancel(visit.id, { studentId: a.id });
@@ -279,7 +279,7 @@ const iso = (offsetDays: number) =>
 
     const results = await Promise.allSettled([
       visits.create(r1.id, { studentId: s.id, visitAt: iso(2) }),
-      visits.create(r2.id, { studentId: s.id, visitAt: iso(3) }),
+      visits.create(r2.id, { studentId: s.id, visitAt: iso(2.5) }),
     ]);
 
     expect(results.filter((r) => r.status === 'fulfilled')).toHaveLength(1);

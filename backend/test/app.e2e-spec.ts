@@ -198,6 +198,32 @@ describe('로그인과 권한 (e2e)', () => {
       expect(res.body.data.studentId).toBe(1); // 김민준 (토큰의 학생)
     });
 
+    it('예약 가능 기간(3일)을 넘기거나 과거 시간이면 400, 정책은 로그인한 누구나 조회할 수 있다', async () => {
+      const tooFar = await api()
+        .post(`/api/study-rooms/${roomId}/visits`)
+        .set(bearer(student2))
+        .send({ visitAt: iso(5) });
+      expect(tooFar.status).toBe(400);
+      expect(tooFar.body.code).toBe('VISIT_TOO_FAR');
+      expect(tooFar.body.data).toEqual({ maxDaysAhead: 3 });
+
+      const past = await api()
+        .post(`/api/study-rooms/${roomId}/visits`)
+        .set(bearer(student2))
+        .send({ visitAt: iso(-0.5) });
+      expect(past.status).toBe(400);
+      expect(past.body.code).toBe('VISIT_IN_PAST');
+
+      for (const token of [student1, instructor]) {
+        const res = await api()
+          .get('/api/booking-policy')
+          .set(bearer(token))
+          .expect(200);
+        expect(res.body.data).toEqual({ maxDaysAhead: 3 });
+      }
+      await api().get('/api/booking-policy').expect(401);
+    });
+
     it('내 신청 목록은 볼 수 있지만 다른 학생의 목록은 403', async () => {
       const mine = await api()
         .get('/api/students/1/visits')
@@ -221,7 +247,7 @@ describe('로그인과 권한 (e2e)', () => {
       const patch = await api()
         .patch(`/api/visits/${visitId}`)
         .set(bearer(student2))
-        .send({ visitAt: iso(3) });
+        .send({ visitAt: iso(2.5) });
       expect(patch.status).toBe(403);
       expect(patch.body.code).toBe('NOT_VISIT_OWNER');
 
@@ -235,7 +261,7 @@ describe('로그인과 권한 (e2e)', () => {
       await api()
         .patch(`/api/visits/${visitId}`)
         .set(bearer(student1))
-        .send({ visitAt: iso(3) })
+        .send({ visitAt: iso(2.5) })
         .expect(200);
       await api()
         .post(`/api/visits/${visitId}/cancel`)

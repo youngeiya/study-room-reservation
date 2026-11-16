@@ -13,7 +13,7 @@ import type { AuthUser } from '../auth/auth.types';
 import { BusinessException } from '../common/business.exception';
 import { CreateVisitBodyDto, UpdateVisitBodyDto } from './dto/visit-body.dto';
 import { VisitHistoryView, VisitReservation, VisitView } from './visit.entity';
-import { VisitService } from './visit.service';
+import { VisitService, maxDaysAhead } from './visit.service';
 
 /**
  * 경로가 자습실·신청·학생에 걸쳐 있어서 클래스 prefix 없이 메서드마다 전체 경로를 적는다.
@@ -24,6 +24,12 @@ import { VisitService } from './visit.service';
 @Controller()
 export class VisitController {
   constructor(private readonly visitService: VisitService) {}
+
+  // GET /api/booking-policy : 예약 가능 기간 안내 (로그인한 누구나). 화면의 날짜 입력 범위와 안내 문구에 쓴다.
+  @Get('booking-policy')
+  bookingPolicy(): { maxDaysAhead: number } {
+    return { maxDaysAhead: maxDaysAhead() };
+  }
 
   // POST /api/study-rooms/1/visits : 방문 신청 (학생)
   @Roles('STUDENT')

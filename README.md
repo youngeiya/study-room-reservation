@@ -163,6 +163,7 @@ ORACLE_TEST_USER=... ORACLE_TEST_PASSWORD=... ORACLE_TEST_CONNECT_STRING=호스�
 | `DB_FILE` | `backend/data/db.json` | (`json`일 때) JSON 데이터 파일 경로 |
 | `ORACLE_USER` / `ORACLE_PASSWORD` / `ORACLE_CONNECT_STRING` | 없음 | (`oracle`일 때 필수) 계정, 비밀번호, 접속 문자열 예) `host:1521/FREEPDB1` |
 
+| `BOOKING_MAX_DAYS_AHEAD` | `3` | 예약 가능 기간(일). 지금부터 이 일수 이내의 방문 시간만 신청·수정할 수 있다. 학원 정책에 맞춰 바꾼다 |
 | `JWT_SECRET` | 서버가 뜰 때 임시 생성 | 로그인 토큰 서명 비밀키(16자 이상). 없으면 서버를 다시 켤 때 모두 다시 로그인해야 하므로 **운영에서는 반드시 지정** |
 | `INSTRUCTOR_ID` / `INSTRUCTOR_PASSWORD` | 코드에 정해 둔 기본 계정 | 처음 실행할 때 만들어지는 기본 강사 계정 (강사 계정이 하나도 없을 때만 생성). **운영 전에 반드시 바꿀 것** |
 
@@ -194,6 +195,7 @@ Docker에서는 같은 변수를 실행할 때 넘기면 됩니다: `DB_TYPE=ora
 | POST | `/auth/login` | 로그인 `{role, loginId, password}` → `{token, user}` | 추가 | 공개 |
 | GET | `/auth/me` | 토큰이 유효한지 확인하고 내 정보 | 추가 | 로그인 |
 | PATCH | `/auth/password` | 내 비밀번호 변경 `{currentPassword, newPassword}` | 추가 | 로그인 |
+| GET | `/booking-policy` | 예약 가능 기간 안내 `{maxDaysAhead}` (화면의 날짜 입력 범위·안내 문구에 사용) | 추가 | 로그인 |
 | GET | `/study-rooms` | 자습실 목록 (삭제 제외, `currentCount`가 현재 신청 인원) | FR-ROM-01 | 로그인 |
 | GET | `/study-rooms/:id` | 자습실 상세 (삭제된 자습실도 조회 가능) | | 로그인 |
 | POST | `/study-rooms` | 등록 `{name, maxPersonnel, startDate, endDate}` | FR-ROM-02 | 강사 |
@@ -320,6 +322,8 @@ frontend/src
 | `VALIDATION_FAILED` | 400 | 입력 형식 오류 |
 | `INVALID_PERIOD` | 400 | 시작 일시가 종료 일시보다 늦거나 같음 |
 | `OUT_OF_PERIOD` | 400 | 방문 시간이 운영 기간 밖 |
+| `VISIT_TOO_FAR` | 400 | 방문 시간이 예약 가능 기간(지금부터 N일)보다 먼 미래 (`data.maxDaysAhead`) |
+| `VISIT_IN_PAST` | 400 | 이미 지난 시간으로 신청·수정 |
 | `NOT_VISIT_OWNER` | 403 | 본인의 신청이 아님 |
 | `ROOM_NOT_FOUND` / `STUDENT_NOT_FOUND` / `VISIT_NOT_FOUND` | 404 | 대상 없음 (삭제된 학생의 수정·삭제도 `STUDENT_NOT_FOUND`) |
 | `STUDENT_HAS_ACTIVE_VISITS` | 409 | 활성 신청이 남은 학생을 삭제하거나 휴원·퇴원으로 바꾸려 함 (`data.visitIds`에 그 신청들) |
@@ -491,7 +495,7 @@ B: 커밋 — version 5 != 6 → 충돌 → 처음부터 재시도 → 10/10 을
 | "방문 시간"의 단위 | 시작 시각 하나(`visitAt`)로 해석. 시작~종료 구간은 받지 않음 | 문구 "방문 시간을 정해 신청"을 가장 단순하게 해석 |
 | 정원의 범위 | **자습실 전체** 기준으로 계산 (시간대별 정원 아님) | 문구가 "자습실별 신청 인원". 시간대별 정원은 확장 과제로 둠 |
 | 운영 기간 경계 | 시작·종료 시각 **자체는 포함** | 기간의 첫 순간과 마지막 순간 모두 방문 가능으로 해석 |
-| 과거 시각 신청 | 현재 시각과의 비교는 하지 않고 운영 기간만 검사 | 요구사항에 없는 규칙을 더하지 않음 |
+| 예약 가능 기간 | 방문 시간은 **지금 ≤ 방문 시각 ≤ 지금 + N일**이어야 한다 (기본 N=3, 경계 포함, `BOOKING_MAX_DAYS_AHEAD`로 변경). 신청과 시간 수정에 모두 적용하고, 취소는 제한하지 않는다. 자습실 **운영 기간 검사가 먼저**이고 그 안에서 이 규칙을 적용한다. 과거 시각은 `VISIT_IN_PAST`, 너무 먼 날짜는 `VISIT_TOO_FAR` | 자습실 운영 기간(한 달 등)과 별개로, 한 번에 먼 날짜까지 자리를 잡아 두지 못하게 하는 규칙. 학원마다 정책이 다르므로 일수를 설정값으로 둠. "3일"은 달력 날짜가 아니라 **지금으로부터 72시간**으로 해석 |
 | 중복 신청 | 학생은 **모든 자습실을 통틀어 활성 신청 한 건**만 가질 수 있다. 같은 자습실이면 `ALREADY_APPLIED`, 다른 자습실이면 `ALREADY_APPLIED_OTHER_ROOM`(어느 자습실인지 함께 안내). 취소하면 다른 자습실에 신청할 수 있다 | 문구 "같은 학생은 한 자습실에 한 건"을 "한 번에 한 자습실만 방문"으로 엄격하게 해석. 자습실마다 한 건씩 허용하는 해석도 가능하지만, 한 사람이 동시에 여러 자습실을 예약해 자리를 차지하는 것을 막으려는 목적으로 판단 |
 | 취소 후 재신청 | 허용. 새 행이 아니라 **기존 신청 행을 다시 `ACTIVE`로** 되돌리고 이력에 `CREATE`를 남김 | 학생당 신청 행을 하나로 유지 |
 | 방문 시간 수정과 정원 | 인원 변화 없음. 같은 시간으로 수정하면 변경 없음으로 보고 이력을 남기지 않음 | 정원은 자습실 단위, 이력 오염 방지 |

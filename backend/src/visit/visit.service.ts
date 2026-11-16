@@ -34,6 +34,18 @@ import {
  * 커밋 때 그 version 이 그대로일 때만 반영된다. 그 사이 다른 신청·취소가 자습실을 바꿨다면 충돌로 감지되어
  * 이 트랜잭션이 처음부터 다시 실행되고, 이번에는 바뀐 인원을 보고 판단한다.
  */
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * 예약 가능 기간(일). 지금부터 이 일수 안의 방문 시간만 신청·수정할 수 있다 (기본 3일).
+ * 학원 정책에 따라 환경 변수 BOOKING_MAX_DAYS_AHEAD 로 바꾼다. 잘못된 값이면 기본값.
+ */
+export const DEFAULT_MAX_DAYS_AHEAD = 3;
+export function maxDaysAhead(): number {
+  const n = Number(process.env.BOOKING_MAX_DAYS_AHEAD);
+  return Number.isFinite(n) && n > 0 ? n : DEFAULT_MAX_DAYS_AHEAD;
+}
+
 @Injectable()
 export class VisitService {
   constructor(
@@ -60,6 +72,7 @@ export class VisitService {
         throw new BusinessException('STUDENT_NOT_ENROLLED'); // 휴원·퇴원 학생은 신청 불가
       }
       this.assertWithinPeriod(room, visitAt); // 운영 기간 안인지
+      this.assertBookable(visitAt); // 지금부터 N일 이내인지 (과거·너무 먼 날짜 거부)
 
       // 이 학생의 신청 전체 (취소된 것 포함). 한 학생은 "모든 자습실을 통틀어" 활성 신청을 한 건만 가질 수 있다.
       const mine = await this.visits.findAll(
@@ -120,6 +133,7 @@ export class VisitService {
       this.assertWithinPeriod(room, visitAt);
 
       if (visit.visitAt === visitAt) return visit; // 바뀐 게 없으면 이력도 남기지 않는다
+      this.assertBookable(visitAt); // 바꾸려는 시간도 같은 예약 가능 기간 안이어야 한다
 
       const now = this.clock.now().toISOString();
       const updated = await this.visits.update({
@@ -246,6 +260,21 @@ export class VisitService {
       throw new BusinessException('STUDENT_NOT_FOUND');
     }
     return student;
+  }
+
+  /**
+   * 예약 가능 기간: 지금 <= 방문 시각 <= 지금 + N일 (경계 포함).
+   * 자습실 운영 기간과는 별개의 규칙이다 (운영 기간이 한 달이어도 신청은 가까운 날짜만 받는다).
+   * 시각은 주입받은 Clock 으로 얻어서 테스트에서 고정할 수 있다.
+   */
+  private assertBookable(visitAt: string) {
+    const now = this.clock.now().getTime();
+    const at = new Date(visitAt).getTime();
+    if (at < now) throw new BusinessException('VISIT_IN_PAST');
+    const days = maxDaysAhead();
+    if (at > now + days * DAY_MS) {
+      throw new BusinessException('VISIT_TOO_FAR', { maxDaysAhead: days });
+    }
   }
 
   // 방문 시간은 운영 기간 안이어야 한다 (시작·종료 시각 자체는 포함)

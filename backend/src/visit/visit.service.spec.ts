@@ -42,7 +42,7 @@ describe('VisitService', () => {
     rooms = new JsonRepository<StudyRoom>(db, STUDY_ROOM_COLLECTION);
     visits = new JsonRepository<VisitReservation>(db, VISIT_COLLECTION);
     histories = new JsonRepository<VisitHistory>(db, VISIT_HISTORY_COLLECTION);
-    now = new Date('2026-11-13T00:00:00.000Z');
+    now = new Date('2026-11-24T00:00:00.000Z');
     const clock = { now: () => now } as Clock; // 테스트에서 시각을 직접 움직인다
     roomService = new StudyRoomService(rooms, visits, db, clock);
     service = new VisitService(visits, histories, rooms, students, db, clock);
@@ -89,6 +89,119 @@ describe('VisitService', () => {
     );
     expect(room.currentCount).toBe(active.length);
   };
+
+  // ── 예약 가능 기간: 지금부터 3일 이내 ─────────────────────────
+  describe('예약 가능 기간(지금부터 3일 이내)', () => {
+    const DAY = 24 * 60 * 60 * 1000;
+    const at = (offsetMs: number) =>
+      new Date(now.getTime() + offsetMs).toISOString();
+
+    afterEach(() => {
+      delete process.env.BOOKING_MAX_DAYS_AHEAD;
+    });
+
+    it('3일 뒤 정각까지는 신청할 수 있고, 1밀리초라도 넘으면 VISIT_TOO_FAR', async () => {
+      const [s1, s2] = await seedStudents(2);
+      const room = await roomService.create({
+        name: '긴 운영 기간',
+        maxPersonnel: 3,
+        startDate: at(-DAY),
+        endDate: at(30 * DAY),
+      });
+
+      await expect(
+        service.create(room.id, { studentId: s1, visitAt: at(3 * DAY) }),
+      ).resolves.toMatchObject({ status: 'ACTIVE' });
+      await expect(
+        service.create(room.id, { studentId: s2, visitAt: at(3 * DAY + 1) }),
+      ).rejects.toMatchObject({
+        code: 'VISIT_TOO_FAR',
+        data: { maxDaysAhead: 3 },
+      });
+      await expectCountMatches(room.id);
+    });
+
+    it('이미 지난 시간으로는 신청할 수 없고, 지금 시각은 허용된다', async () => {
+      const [s1, s2] = await seedStudents(2);
+      const room = await roomService.create({
+        name: '긴 운영 기간',
+        maxPersonnel: 3,
+        startDate: at(-DAY),
+        endDate: at(30 * DAY),
+      });
+
+      await expect(
+        service.create(room.id, { studentId: s1, visitAt: at(-1) }),
+      ).rejects.toMatchObject({ code: 'VISIT_IN_PAST' });
+      await expect(
+        service.create(room.id, { studentId: s2, visitAt: at(0) }),
+      ).resolves.toBeDefined();
+    });
+
+    it('운영 기간 밖이면 예약 가능 기간보다 OUT_OF_PERIOD 가 먼저 안내된다', async () => {
+      const [s1] = await seedStudents(1);
+      const room = await makeRoom(); // 운영 기간 11-20 ~ 11-30
+      await expect(
+        service.create(room.id, {
+          studentId: s1,
+          visitAt: '2026-12-25T00:00:00.000Z',
+        }),
+      ).rejects.toMatchObject({ code: 'OUT_OF_PERIOD' });
+    });
+
+    it('시간 수정도 같은 기간 안에서만 가능하다 (변경 없는 수정은 허용)', async () => {
+      const [s1] = await seedStudents(1);
+      const room = await roomService.create({
+        name: '긴 운영 기간',
+        maxPersonnel: 3,
+        startDate: at(-DAY),
+        endDate: at(30 * DAY),
+      });
+      const visit = await service.create(room.id, {
+        studentId: s1,
+        visitAt: at(DAY),
+      });
+
+      await expect(
+        service.update(visit.id, { studentId: s1, visitAt: at(5 * DAY) }),
+      ).rejects.toMatchObject({ code: 'VISIT_TOO_FAR' });
+      await expect(
+        service.update(visit.id, { studentId: s1, visitAt: at(-DAY) }),
+      ).rejects.toMatchObject({ code: 'VISIT_IN_PAST' });
+      expect((await visits.findById(visit.id))!.visitAt).toBe(at(DAY)); // 거부된 수정은 반영되지 않음
+
+      await expect(
+        service.update(visit.id, { studentId: s1, visitAt: at(2 * DAY) }),
+      ).resolves.toMatchObject({ visitAt: at(2 * DAY) });
+      // 이미 신청한 시간이 지금은 3일 뒤로 밀려났어도, 같은 시간으로의 "수정"은 변경 없음이라 그대로 통과
+      await expect(
+        service.update(visit.id, { studentId: s1, visitAt: at(2 * DAY) }),
+      ).resolves.toBeDefined();
+    });
+
+    it('일수는 환경 변수 BOOKING_MAX_DAYS_AHEAD 로 바꿀 수 있고, 잘못된 값은 기본 3일', async () => {
+      const [s1, s2] = await seedStudents(2);
+      const room = await roomService.create({
+        name: '긴 운영 기간',
+        maxPersonnel: 3,
+        startDate: at(-DAY),
+        endDate: at(30 * DAY),
+      });
+
+      process.env.BOOKING_MAX_DAYS_AHEAD = '7';
+      await expect(
+        service.create(room.id, { studentId: s1, visitAt: at(6 * DAY) }),
+      ).resolves.toBeDefined();
+
+      process.env.BOOKING_MAX_DAYS_AHEAD = 'abc';
+      await expect(
+        service.create(room.id, { studentId: s2, visitAt: at(6 * DAY) }),
+      ).rejects.toMatchObject({
+        code: 'VISIT_TOO_FAR',
+        data: { maxDaysAhead: 3 },
+      });
+    });
+  });
 
   // ── 한 학생은 모든 자습실을 통틀어 활성 신청 1건 ───────────────
   describe('다른 자습실에 이미 신청한 학생', () => {
@@ -218,25 +331,34 @@ describe('VisitService', () => {
 
   it('운영 기간 밖이면 OUT_OF_PERIOD (시작·종료 시각 자체는 허용)', async () => {
     const [s1, s2, s3] = await seedStudents(3);
-    const room = await makeRoom(3);
+    // 운영 기간의 경계가 "예약 가능 기간(지금부터 3일)" 안에 오도록, 지금 기준으로 자습실을 만든다
+    const HOUR = 60 * 60 * 1000;
+    const start = new Date(now.getTime() + 1 * HOUR).toISOString();
+    const end = new Date(now.getTime() + 48 * HOUR).toISOString();
+    const room = await roomService.create({
+      name: '경계 테스트',
+      maxPersonnel: 3,
+      startDate: start,
+      endDate: end,
+    });
 
     await expect(
       service.create(room.id, {
         studentId: s1,
-        visitAt: '2026-11-19T23:59:59.999Z',
+        visitAt: new Date(now.getTime() + 1 * HOUR - 1).toISOString(),
       }),
     ).rejects.toMatchObject({ code: 'OUT_OF_PERIOD' });
     await expect(
       service.create(room.id, {
         studentId: s1,
-        visitAt: '2026-11-30T00:00:00.001Z',
+        visitAt: new Date(now.getTime() + 48 * HOUR + 1).toISOString(),
       }),
     ).rejects.toMatchObject({ code: 'OUT_OF_PERIOD' });
     await expect(
-      service.create(room.id, { studentId: s2, visitAt: START }),
+      service.create(room.id, { studentId: s2, visitAt: start }),
     ).resolves.toBeDefined();
     await expect(
-      service.create(room.id, { studentId: s3, visitAt: END }),
+      service.create(room.id, { studentId: s3, visitAt: end }),
     ).resolves.toBeDefined();
   });
 
@@ -400,9 +522,9 @@ describe('VisitService', () => {
     const [s1, s2] = await seedStudents(2);
     const room = await makeRoom();
     const v1 = await service.create(room.id, { studentId: s1, visitAt: DAY25 });
-    now = new Date('2026-11-13T01:00:00.000Z');
+    now = new Date('2026-11-24T01:00:00.000Z');
     await service.create(room.id, { studentId: s2, visitAt: DAY25 });
-    now = new Date('2026-11-13T02:00:00.000Z');
+    now = new Date('2026-11-24T02:00:00.000Z');
     await service.cancel(v1.id, { studentId: s1 });
     await roomService.remove(room.id);
 

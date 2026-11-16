@@ -78,6 +78,8 @@ export function describeError(error: unknown): string {
   } else if (isRecord(data)) {
     if (Array.isArray(data.visitIds)) detail = `영향받는 신청 번호: ${data.visitIds.join(', ')}`
     else if (typeof data.roomId === 'number') detail = `신청한 자습실 번호: ${data.roomId}`
+    else if (typeof data.maxDaysAhead === 'number')
+      detail = `예약은 지금부터 ${data.maxDaysAhead}일 이내만 가능합니다`
     else if (typeof data.currentCount === 'number')
       detail = `현재 신청 인원: ${data.currentCount}명`
   }

@@ -30,9 +30,25 @@ const isDeleted = computed(() => room.value?.deletedAt != null)
 const isFull = computed(() => !!room.value && isRoomFull(room.value))
 const activeVisit = computed(() => (myVisit.value?.status === 'ACTIVE' ? myVisit.value : null))
 
-// 운영 기간 안에서만 고를 수 있게 입력창의 min/max 를 맞춘다 (최종 검사는 서버가 한다)
-const minInput = computed(() => (room.value ? isoToLocalInput(room.value.startDate) : undefined))
-const maxInput = computed(() => (room.value ? isoToLocalInput(room.value.endDate) : undefined))
+// 예약 가능 기간(서버 정책): 지금부터 며칠 이내. 화면은 안내와 입력 범위 제한만 하고, 최종 검사는 서버가 한다.
+const maxDaysAhead = ref(3)
+const loadedAt = ref(Date.now()) // 자습실을 불러온 시각 (이 시각을 기준으로 입력 범위를 계산한다)
+
+// 고를 수 있는 범위 = 자습실 운영 기간 ∩ [지금, 지금 + N일]
+const minInput = computed(() => {
+  if (!room.value) return undefined
+  return isoToLocalInput(
+    new Date(Math.max(Date.parse(room.value.startDate), loadedAt.value)).toISOString(),
+  )
+})
+const maxInput = computed(() => {
+  if (!room.value) return undefined
+  const limit = loadedAt.value + maxDaysAhead.value * 24 * 60 * 60 * 1000
+  return isoToLocalInput(new Date(Math.min(Date.parse(room.value.endDate), limit)).toISOString())
+})
+const bookingHint = computed(
+  () => `지금부터 ${maxDaysAhead.value}일 이내의 시간만 신청할 수 있어요`,
+)
 
 const actionLabel: Record<VisitAction, string> = {
   CREATE: '신청',
@@ -48,6 +64,8 @@ const actionColor: Record<VisitAction, string> = {
 async function load() {
   await run(async () => {
     room.value = await api.getRoom(roomId.value)
+    loadedAt.value = Date.now()
+    if (!session.isInstructor) maxDaysAhead.value = (await api.getBookingPolicy()).maxDaysAhead
     if (session.isInstructor) {
       histories.value = await api.listHistories(roomId.value) // FR-ROM-03
     } else if (session.studentId !== null) {
@@ -211,7 +229,8 @@ async function cancelVisit() {
               label="방문 시간"
               :min="minInput"
               :max="maxInput"
-              hide-details
+              :hint="bookingHint"
+              persistent-hint
               style="max-width: 280px"
             />
             <v-btn color="primary" height="48" :disabled="busy || !visitInput" @click="saveVisit"
@@ -243,7 +262,8 @@ async function cancelVisit() {
               label="방문 시간"
               :min="minInput"
               :max="maxInput"
-              hide-details
+              :hint="bookingHint"
+              persistent-hint
               style="max-width: 280px"
             />
             <!-- 정원이 차 있어도 누를 수 있게 둔다: 누르면 서버가 ROOM_FULL 로 거부하고 경고창을 띄운다 -->

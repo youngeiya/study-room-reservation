@@ -18,6 +18,8 @@ export const api = {
   login: (body: { role: Role; loginId: string; password: string }) =>
     request<LoginResult>('POST', '/auth/login', body),
   me: () => request<AuthUser>('GET', '/auth/me'),
+  // 예약 가능 기간(지금부터 며칠 이내). 날짜 입력 범위와 안내 문구에 쓴다.
+  getBookingPolicy: () => request<{ maxDaysAhead: number }>('GET', '/booking-policy'),
   changePassword: (body: { currentPassword: string; newPassword: string }) =>
     request<null>('PATCH', '/auth/password', body),
 
