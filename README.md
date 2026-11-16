@@ -22,7 +22,7 @@
 | FR-VST-03 | 방문 취소 | 필수 | 완료 |
 | FR-VST-04 | 내 신청 목록 | 선택 | 완료 |
 | FR-ROM-06 | 수정·삭제 시 기존 신청 처리 | 선택 | 완료 ([5장](#5-규칙-해석-애매한-부분에-대한-결정) 정책) |
-| FR-STD-02 | 학생 등록·수정·삭제 | 선택 | **미구현** (접근 방식은 [6장](#6-개발하며-고민한-점--아쉬운-점)) |
+| FR-STD-02 | 학생 등록·수정·삭제 | 선택 | 완료 (삭제 정책은 [5장](#5-규칙-해석-애매한-부분에-대한-결정)) |
 
 ---
 
@@ -94,7 +94,7 @@ $env:WEB_PORT='8081'; docker compose up -d --build
 빠르게 확인하려면 이 순서를 추천합니다.
 
 1. **강사**로 자습실을 등록합니다 (예: 최대 2명, 이번 주 운영 기간).
-2. **학생**으로 바꿔 신청합니다. 같은 학생이 다시 신청하면 "이미 신청한 자습실" 오류가 납니다.
+2. **학생**으로 바꿔 신청합니다. 같은 학생이 다시 신청하면 "이미 신청한 자습실" 오류가, 다른 자습실에 신청하면 "다른 자습실에 이미 방문을 신청했습니다" 오류가 납니다(취소하면 다시 신청할 수 있습니다).
 3. 다른 학생 2명으로 신청하면 두 번째 학생부터 정원 오류가 납니다. 한 명이 취소하면 그 자리에 다시 신청할 수 있습니다.
 4. **강사**로 돌아와 자습실 상세의 **신청 이력**에서 신청·수정·취소가 시간순으로 남아 있는지 확인합니다.
 
@@ -106,15 +106,45 @@ cd frontend && npx vitest run           # 날짜 변환 유틸 (Vitest)
 cd frontend && npm run type-check       # 타입 검사
 ```
 
+Oracle 통합 테스트(선택)는 환경 변수가 있을 때만 실행되고, 없으면 건너뜁니다. 시작할 때 대상 스키마의 **모든 데이터를 지우므로 테스트 전용 빈 스키마**(`db/oracle/02_schema.sql`만 적용)로만 실행하세요.
+
+```bash
+cd backend
+ORACLE_TEST_USER=... ORACLE_TEST_PASSWORD=... ORACLE_TEST_CONNECT_STRING=호스트:1521/FREEPDB1 npm test -- oracle.integration
+```
+
+정원 초과 동시 신청, 같은 학생의 동시 신청, 학번 동시 등록, 롤백 등을 실제 DB에서 확인합니다.
+
 ### 데이터와 환경 변수
 
-- 데이터는 `backend/data/db.json`에 저장되고, 첫 실행 시 자동 생성되며 학생 5명이 시드로 들어갑니다. 이 폴더는 git에 포함되지 않습니다.
+- 데이터는 `backend/data/db.json`에 저장되고, 첫 실행 시 자동 생성되며 예시 데이터(학생 5명, 부엉이 라이브러리 1관·2관·3관, 최대 10명·10명·5명)가 시드로 들어갑니다. 자습실 시드는 어제부터 30일 뒤까지의 운영 기간으로 만들어져 바로 신청해 볼 수 있고, 자습실이 한 건이라도 있으면(삭제된 것 포함) 다시 넣지 않습니다. 이 폴더는 git에 포함되지 않습니다.
 - 데이터를 초기화하려면 백엔드를 끄고 `backend/data/db.json`을 삭제한 뒤 다시 실행합니다.
 
 | 환경 변수 | 기본값 | 설명 |
 | --- | --- | --- |
 | `PORT` | `3000` | 백엔드 포트 (바꾸면 `frontend/vite.config.ts`의 프록시 대상도 함께 변경) |
-| `DB_FILE` | `backend/data/db.json` | JSON 데이터 파일 경로 |
+| `DB_TYPE` | `json` | 저장소 종류. `json`(기본, 설치 불필요) 또는 `oracle` |
+| `DB_FILE` | `backend/data/db.json` | (`json`일 때) JSON 데이터 파일 경로 |
+| `ORACLE_USER` / `ORACLE_PASSWORD` / `ORACLE_CONNECT_STRING` | 없음 | (`oracle`일 때 필수) 계정, 비밀번호, 접속 문자열 예) `host:1521/FREEPDB1` |
+
+환경 변수는 `backend/.env` 파일로도 줄 수 있습니다 ([backend/.env.example](backend/.env.example)을 복사). `.env`는 git에 올라가지 않습니다.
+
+### Oracle로 실행 (선택)
+
+기본은 JSON 파일이라 아무 설정이 필요 없습니다. 실서비스를 가정해 **같은 서비스 코드를 Oracle에서도 실행**할 수 있게 했고, 환경 변수만 바꾸면 전환됩니다.
+
+1. [db/oracle/](db/oracle/)의 SQL로 스키마를 만듭니다 (`01_create_user.sql` → `02_schema.sql` → `03_seed.sql`).
+2. 환경 변수를 설정하고 백엔드를 실행합니다. 프론트엔드는 바꿀 것이 없습니다.
+
+```bash
+# backend/.env
+DB_TYPE=oracle
+ORACLE_USER=studyroom
+ORACLE_PASSWORD=비밀번호
+ORACLE_CONNECT_STRING=호스트:1521/FREEPDB1
+```
+
+Docker에서는 같은 변수를 실행할 때 넘기면 됩니다: `DB_TYPE=oracle ORACLE_USER=... ORACLE_PASSWORD=... ORACLE_CONNECT_STRING=... docker compose up -d --build`. 드라이버는 `oracledb`의 Thin 모드라서 Oracle 클라이언트를 따로 설치할 필요가 없습니다.
 
 ### API 목록
 
@@ -128,7 +158,10 @@ cd frontend && npm run type-check       # 타입 검사
 | PATCH | `/study-rooms/:id` | 수정 (보낸 필드만) | FR-ROM-04, 06 |
 | DELETE | `/study-rooms/:id` | 삭제 (Soft Delete) | FR-ROM-05 |
 | GET | `/study-rooms/:roomId/histories` | 신청·수정·취소 이력 (시간순) | FR-ROM-03 |
-| GET | `/students` | 학생 목록 | FR-STD-01 |
+| GET | `/students` | 학생 목록 (삭제 제외) | FR-STD-01 |
+| POST | `/students` | 학생 등록 `{name, phone, studentNo, guardianPhone?, grade?, memo?}` | FR-STD-02 |
+| PATCH | `/students/:id` | 학생 수정 (보낸 필드만, `status`로 재원·휴원·퇴원 변경, 선택 값은 `null`로 비움) | FR-STD-02 |
+| DELETE | `/students/:id` | 학생 삭제 (Soft Delete, 활성 신청이 있으면 거부) | FR-STD-02 |
 | POST | `/study-rooms/:roomId/visits` | 방문 신청 `{studentId, visitAt}` | FR-VST-01 |
 | PATCH | `/visits/:id` | 방문 시간 수정 `{studentId, visitAt}` | FR-VST-02 |
 | POST | `/visits/:id/cancel` | 방문 취소 `{studentId}` | FR-VST-03 |
@@ -141,15 +174,16 @@ cd frontend && npm run type-check       # 타입 검사
 | 영역 | 선택 | 이유 |
 | --- | --- | --- |
 | 프론트엔드 | Vue 3 (Composition API, `<script setup>`), TypeScript, Vite | 과제 필수 스택. 타입을 두어 서버 응답 모양을 화면 코드에서 컴파일 시점에 확인 |
+| UI | Vuetify 3 (Material Design) | 상단바·왼쪽 메뉴·카드·표 등 기본 부품을 제공하고, 좁은 화면에서는 메뉴가 햄버거 버튼으로 바뀌는 반응형 레이아웃을 쉽게 구성 |
 | 상태 관리 | Pinia | "지금 누구로 보고 있는가(역할·학생)"만 전역 상태. 서버 데이터는 각 화면이 직접 불러와 상태를 단순하게 유지 |
 | 라우팅 | Vue Router | 화면별 역할 제한(강사 전용·학생 전용)을 라우트 메타와 가드로 선언 |
 | 백엔드 | NestJS, TypeScript | 과제 필수 스택. Module/Controller/Service/Provider 구조와 DI, Pipe·Filter·Interceptor가 계층 분리에 적합 |
 | 입력 검증 | class-validator + `ValidationPipe` | DTO에 규칙을 선언하고 컨트롤러에 들어오기 전에 한 곳에서 검사. 정의되지 않은 필드는 거부 |
-| 저장소 | JSON 파일 + `Repository` 인터페이스 | 과제에서 허용한 방식으로 설치 없이 바로 실행. 서비스는 인터페이스에만 의존하므로 실제 DB 구현체로 교체 가능 |
+| 저장소 | JSON 파일(기본) / Oracle + `Database`·`Repository` 추상화 | JSON 은 과제에서 허용한 방식으로 설치 없이 바로 실행. 서비스는 추상 클래스에만 의존하므로 환경 변수(`DB_TYPE`)로 Oracle 구현체로 전환 (`oracledb` Thin 모드) |
 | 테스트 | Jest(백엔드), Vitest(프론트엔드) | 각 프레임워크의 기본 구성을 그대로 사용 |
 | 배포(선택) | Docker, Docker Compose, nginx | 환경 차이 없이 명령 한 줄로 실행. 정적 파일 서빙과 `/api` 프록시를 nginx가 맡아 개발 환경과 같은 호출 경로를 유지 |
 
-UI 라이브러리는 쓰지 않았습니다. 화면에 시간을 쓰기보다 서버 규칙과 설계에 집중하기 위해 최소한의 CSS만 사용했습니다.
+화면은 UI 라이브러리 **Vuetify**(Material Design)로 구성했습니다. 직접 스타일을 만드는 데 시간을 쓰기보다 서버 규칙과 설계에 집중하고, 카드·표·대화상자·반응형 메뉴 같은 기본 부품을 일관되게 쓰기 위해서입니다. (React의 MUI와 같은 Material Design을 Vue용으로 구현한 라이브러리입니다.)
 
 ---
 
@@ -182,7 +216,7 @@ ValidationPipe      요청 body를 DTO 규칙으로 검사 (실패 → 400 VALID
 ```
 backend/src
   common/       공통: 에러 코드, BusinessException, 예외 필터, 응답 인터셉터, Clock
-  storage/      Repository 인터페이스, JsonRepository, JsonDatabase(트랜잭션·낙관적 락)
+  storage/      Database·Repository 추상화, JsonDatabase(트랜잭션·낙관적 락), oracle/(OracleDatabase·OracleRepository·테이블 매핑)
   student/      학생: entity, service, controller, module
   study-room/   자습실: entity, dto, service, controller, module
   visit/        방문 신청·이력: entity, dto, service, controller, module
@@ -192,6 +226,7 @@ frontend/src
   stores/       Pinia (역할·학생 선택)
   router/       라우트와 역할 가드
   views/        화면 (자습실 목록·상세, 학생 목록, 내 신청)
+  plugins/      Vuetify 설정 (테마, 아이콘, 한국어)
   components/   재사용 컴포넌트 (RoomForm)
   composables/  useAction (진행 상태·오류 문구 공통 처리)
   utils/        날짜 변환
@@ -223,10 +258,14 @@ frontend/src
 | `INVALID_PERIOD` | 400 | 시작 일시가 종료 일시보다 늦거나 같음 |
 | `OUT_OF_PERIOD` | 400 | 방문 시간이 운영 기간 밖 |
 | `NOT_VISIT_OWNER` | 403 | 본인의 신청이 아님 |
-| `ROOM_NOT_FOUND` / `STUDENT_NOT_FOUND` / `VISIT_NOT_FOUND` | 404 | 대상 없음 |
+| `ROOM_NOT_FOUND` / `STUDENT_NOT_FOUND` / `VISIT_NOT_FOUND` | 404 | 대상 없음 (삭제된 학생의 수정·삭제도 `STUDENT_NOT_FOUND`) |
+| `STUDENT_HAS_ACTIVE_VISITS` | 409 | 활성 신청이 남은 학생을 삭제하거나 휴원·퇴원으로 바꾸려 함 (`data.visitIds`에 그 신청들) |
+| `STUDENT_NO_DUPLICATED` | 409 | 이미 쓰는 학번으로 등록·수정 |
+| `STUDENT_NOT_ENROLLED` | 409 | 휴원·퇴원 학생이 방문을 신청 |
 | `ROOM_DELETED` | 409 | 삭제된 자습실에는 신청·수정할 수 없음 |
 | `ROOM_FULL` | 409 | 정원 초과 |
 | `ALREADY_APPLIED` | 409 | 같은 학생의 중복 신청 |
+| `ALREADY_APPLIED_OTHER_ROOM` | 409 | 같은 학생이 다른 자습실에 이미 신청 중 (`data.roomId`에 그 자습실) |
 | `VISIT_ALREADY_CANCELLED` | 409 | 이미 취소된 신청 |
 | `CAPACITY_BELOW_APPLIED` | 409 | 최대 인원을 현재 신청 인원보다 작게 줄임 |
 | `PERIOD_CONFLICTS_VISITS` | 409 | 운영 기간 변경으로 기존 신청이 기간 밖이 됨 |
@@ -268,9 +307,16 @@ erDiagram
 | --- | --- | --- |
 | id | number | PK (컬렉션별 순번 발급) |
 | version | number | 낙관적 락용 버전 (수정될 때마다 +1) |
-| name, phone | string | 이름, 연락처 |
+| name, phone | string | 이름, 연락처 (과제 필수 필드) |
+| studentNo | string \| null | **학번(수강번호)**. 삭제되지 않은 학생끼리는 중복 불가 (부분 유니크). 동명이인·같은 번호를 구분하는 기준 |
+| guardianPhone | string \| null | 학부모 연락처 (선택). 미성년 학생이 많은 학원에서 보호자 연락에 필요 |
+| grade | string \| null | 학년 (선택). 예) 고2 |
+| memo | string \| null | 강사 메모 (선택, 최대 200자) |
+| status | `ENROLLED` \| `ON_LEAVE` \| `WITHDRAWN` | **재원 상태** (재원/휴원/퇴원). 재원인 학생만 신청 가능. 실무에서는 학생을 지우지 않고 퇴원 처리하는 경우가 많아 삭제와 분리 |
 | createdAt, updatedAt | datetime | UTC ISO 문자열 |
 | deletedAt | datetime \| null | Soft Delete (null = 삭제되지 않음) |
+
+학번을 비워 둘 수 있는(null) 이유는 **이전 버전에서 저장된 학생과의 호환** 때문입니다. 서버가 시작될 때 새 필드가 없는 이전 행은 기본값(재원, 값 없음)으로 채워집니다. 새로 등록하는 학생은 학번이 필수입니다. 비밀번호·주민번호 같은 정보는 로그인과 인증이 없고 개인정보는 최소로 다루는 것이 원칙이라 일부러 넣지 않았습니다.
 
 ### StudyRoom (자습실)
 
@@ -342,6 +388,19 @@ B: 커밋 — version 5 != 6 → 충돌 → 처음부터 재시도 → 10/10 을
 
 **6. `Repository` 인터페이스.** 서비스는 `findAll / findById / create / update`만 압니다. 실제 DB로 바꿀 때는 구현체를 교체하면 되고, `version` 비교는 `UPDATE … WHERE id = ? AND version = ?`로, 이력과 신청의 한 트랜잭션은 DB 트랜잭션으로 그대로 옮겨집니다.
 
+### Oracle 전환용 스크립트 (`db/oracle/`)
+
+실서비스를 가정해 같은 구조를 Oracle 로 옮긴 SQL 을 [db/oracle/](db/oracle/)에 두었습니다. **현재 앱은 위의 JSON 저장소로 동작하며(별도 DB 설치 없이 실행), 이 스크립트는 DB 구현체로 교체할 때의 설계와 쿼리입니다.**
+
+| 파일 | 내용 |
+| --- | --- |
+| `01_create_user.sql` | 업무별 스키마(사용자) `STUDYROOM` 생성과 최소 권한 (비밀번호는 실행 때 입력) |
+| `02_schema.sql` | 테이블 4개(`student`, `study_room`, `visit_reservation`, `visit_history`), 제약조건, 인덱스 |
+| `03_seed.sql` | 예시 데이터 (앱의 시드와 동일) |
+| `04_queries.sql` | 신청·취소·수정·삭제 등 핵심 쿼리와 낙관적 락 UPDATE 예시 |
+
+서비스에서 하던 검사의 최종 방어선을 DB 제약으로도 둡니다. 예를 들어 `CHECK (current_count BETWEEN 0 AND max_personnel)`로 정원 초과·음수를 막고, 함수 기반 유니크 인덱스로 "삭제되지 않은 학생끼리 학번 유일"과 "학생당 활성 신청 한 건"을 보장합니다. 위반 쿼리를 직접 실행해 제약이 거부하는 것과, `WHERE version = ?` 조건의 UPDATE 가 충돌 시 0행을 반환하는 것을 확인했습니다.
+
 ---
 
 ## 5. 규칙 해석 (애매한 부분에 대한 결정)
@@ -352,12 +411,15 @@ B: 커밋 — version 5 != 6 → 충돌 → 처음부터 재시도 → 10/10 을
 | 정원의 범위 | **자습실 전체** 기준으로 계산 (시간대별 정원 아님) | 문구가 "자습실별 신청 인원". 시간대별 정원은 확장 과제로 둠 |
 | 운영 기간 경계 | 시작·종료 시각 **자체는 포함** | 기간의 첫 순간과 마지막 순간 모두 방문 가능으로 해석 |
 | 과거 시각 신청 | 현재 시각과의 비교는 하지 않고 운영 기간만 검사 | 요구사항에 없는 규칙을 더하지 않음 |
-| 중복 신청 | 학생당 자습실당 **활성 신청 한 건** | 문구 "한 자습실에 한 건" |
+| 중복 신청 | 학생은 **모든 자습실을 통틀어 활성 신청 한 건**만 가질 수 있다. 같은 자습실이면 `ALREADY_APPLIED`, 다른 자습실이면 `ALREADY_APPLIED_OTHER_ROOM`(어느 자습실인지 함께 안내). 취소하면 다른 자습실에 신청할 수 있다 | 문구 "같은 학생은 한 자습실에 한 건"을 "한 번에 한 자습실만 방문"으로 엄격하게 해석. 자습실마다 한 건씩 허용하는 해석도 가능하지만, 한 사람이 동시에 여러 자습실을 예약해 자리를 차지하는 것을 막으려는 목적으로 판단 |
 | 취소 후 재신청 | 허용. 새 행이 아니라 **기존 신청 행을 다시 `ACTIVE`로** 되돌리고 이력에 `CREATE`를 남김 | 학생당 신청 행을 하나로 유지 |
 | 방문 시간 수정과 정원 | 인원 변화 없음. 같은 시간으로 수정하면 변경 없음으로 보고 이력을 남기지 않음 | 정원은 자습실 단위, 이력 오염 방지 |
 | 이미 취소한 신청의 취소·수정 | `VISIT_ALREADY_CANCELLED` 오류 | 인원이 두 번 줄거나 이력이 중복되는 것을 방지 |
 | 삭제된 자습실 | 목록에서 제외. 상세·이력 조회 가능. **신청·수정 불가**, 학생의 **취소는 가능** | Soft Delete 취지. 취소는 학생에게 불리하지 않고 인원 정합성도 유지 |
-| 삭제된 학생 | 신청 불가(`STUDENT_NOT_FOUND`), 기존 이력에는 이름이 그대로 표시 | Soft Delete 일관성 |
+| 삭제된 학생 | 신청 불가(`STUDENT_NOT_FOUND`), 수정·재삭제 불가, 기존 이력에는 이름이 그대로 표시 | Soft Delete 일관성 |
+| 학번 | 삭제되지 않은 학생끼리 **중복 불가** (`STUDENT_NO_DUPLICATED`). 삭제된 학생의 학번은 다시 쓸 수 있다. 동시에 같은 학번으로 등록해도 한 명만 성공한다 | 학번은 사람을 구분하는 기준. 서비스에서 먼저 확인하고, 동시 요청은 저장소의 유니크 제약(커밋 때 검사)이 막는다. 실제 DB라면 `UNIQUE INDEX (student_no) WHERE deleted_at IS NULL` |
+| 재원 상태 | 재원(`ENROLLED`)인 학생만 **신청 가능**(`STUDENT_NOT_ENROLLED`). 휴원·퇴원으로 바꾸려면 **활성 신청이 없어야 한다**(삭제와 같은 원칙). 퇴원은 삭제와 달리 학생 정보를 목록에 남긴다 | 실무에서는 학생을 지우지 않고 퇴원 처리한다. 신청이 남은 채로 상태만 바꾸면 인원이 어긋나므로 먼저 정리하게 한다. 휴원 학생이 이미 가진 신청은 만들 수 없는 상태가 되도록 막는다 |
+| 활성 신청이 있는 학생의 삭제 | **거부** (`STUDENT_HAS_ACTIVE_VISITS`, 어떤 신청인지 함께 안내). 신청을 먼저 취소하면 삭제할 수 있다. 자동으로 신청을 취소하지 않는다 | 학생을 지우면서 자습실 인원과 이력을 시스템이 임의로 바꾸면 안 된다는 FR-ROM-06과 같은 원칙. 신청과 삭제가 동시에 일어나도 학생 행의 version으로 충돌을 감지해 "삭제된 학생의 활성 신청"이 생기지 않음 |
 | 본인 확인 | 수정·취소 요청에 `studentId`를 받아 본인 신청이 아니면 `NOT_VISIT_OWNER` | 로그인이 없어도 "본인 신청만" 규칙은 지킴 |
 | **최대 인원 축소 (FR-ROM-06)** | 현재 신청 인원보다 작게 줄이면 **거부**(409). 같은 값까지는 허용 | 학생 모르게 신청이 사라지지 않게, 강사가 먼저 판단 |
 | **운영 기간 변경 (FR-ROM-06)** | 기간 밖으로 밀려나는 활성 신청이 있으면 **거부**하고, 영향받는 신청 번호를 `data`로 반환 | 자동 취소 대신 강사에게 선택권을 줌 |
@@ -394,15 +456,20 @@ B: 커밋 — version 5 != 6 → 충돌 → 처음부터 재시도 → 10/10 을
 - 정원은 자습실 전체 기준이고 시간대별로 나누지 않았습니다 (예: 7시 신청자와 8시 신청자를 따로 세기).
 - 인증·인가가 없어 API가 `studentId`를 그대로 신뢰합니다.
 - 목록 페이지네이션이 없고, 프론트엔드 테스트는 날짜 변환 유틸에 한정됩니다 (화면 단위·E2E 테스트 없음).
-- 데이터베이스 수준의 유니크 제약이 없어서, "학생당 자습실당 한 건"은 서비스 로직과 자습실 행의 `version`으로 보장합니다. 실제 DB라면 `(room_id, student_id)` 유니크 인덱스를 함께 둘 것입니다.
+- 데이터베이스 수준의 유니크 제약이 없어서, "학생당 활성 신청 한 건"은 서비스 로직과 version(같은 자습실은 자습실 행, 다른 자습실 동시 신청은 학생 행)으로 보장합니다. 실제 DB라면 `student_id`에 대한 부분 유니크 인덱스(`WHERE status = 'ACTIVE'`)를 함께 둘 것입니다.
 
-### 미구현: FR-STD-02 (학생 등록·수정·삭제) 접근 방식
+### FR-STD-02 (학생 등록·수정·삭제) 구현 메모
 
-학생 모듈에 자습실과 같은 방식의 `POST / PATCH / DELETE /students`를 추가합니다 (DTO 검증, `version` 기반 수정, Soft Delete). 삭제 시에는 해당 학생의 활성 신청을 어떻게 할지 정해야 하는데, 자습실의 FR-ROM-06과 같은 원칙으로 **활성 신청이 있으면 삭제를 거부**하고 강사가 먼저 정리하도록 하는 안을 택할 예정입니다. 이미 삭제된 학생은 신청 대상에서 제외되고 이력의 이름은 유지되도록 구현되어 있어, 추가 작업은 학생 CRUD 엔드포인트와 화면입니다.
+학생 모듈에 자습실과 같은 방식으로 `POST / PATCH / DELETE /students`를 구현했습니다 (DTO 검증, `version` 기반 수정, Soft Delete). 삭제 시 활성 신청을 어떻게 할지가 쟁점이었고, 자습실의 FR-ROM-06과 같은 원칙으로 **활성 신청이 있으면 삭제를 거부**하고 강사가 먼저 정리하도록 했습니다. 신청을 취소한 학생은 삭제할 수 있고, 삭제된 학생은 신청 대상에서 제외되며 이력의 이름은 유지됩니다. 학생 목록 화면(강사 전용)에서 등록·수정·삭제를 할 수 있습니다.
+
+다른 선택지는 "삭제하면서 활성 신청을 자동 취소"(자습실 인원과 이력을 함께 바꿔야 해서 실수 여지가 큼)였습니다. 연락처는 형식만 검사하고 중복은 허용합니다 (동명이인·가족 번호 공유 가능). 대신 사람을 구분하는 기준으로 **학번**을 두었습니다.
+
+실무를 생각해 학번, 학부모 연락처, 학년, 강사 메모, 재원 상태(재원·휴원·퇴원)를 추가했습니다. 가장 신경 쓴 부분은 두 가지입니다. 첫째, 학번 중복 방지는 서비스 검사만으로는 동시 등록을 막을 수 없어서 저장소에 DB의 유니크 인덱스 같은 제약을 두고 커밋 때 검사합니다(테스트로 확인). 둘째, 이전 데이터와의 호환을 위해 새 필드가 없는 이전 행을 시작할 때 기본값으로 채웁니다.
 
 ### 확장 아이디어
 
-- 실제 DB(PostgreSQL 등) 구현체 교체와 `(room_id, student_id)` 유니크 인덱스
+- 실제 DB(PostgreSQL 등) 구현체 교체와 유니크 인덱스(학번, 학생당 활성 신청 한 건)
+- 학생 목록의 검색·필터(학년, 재원 상태)와 페이지네이션, 상태 변경 이력(휴원·퇴원 사유)
 - 시간대별 정원, 대기 목록
 - 로그인(JWT)과 역할 기반 접근 제어
 - 신청 상태 변경 알림
