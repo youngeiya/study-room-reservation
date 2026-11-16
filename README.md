@@ -162,7 +162,6 @@ ORACLE_TEST_USER=... ORACLE_TEST_PASSWORD=... ORACLE_TEST_CONNECT_STRING=호스�
 | `DB_TYPE` | `json` | 저장소 종류. `json`(기본, 설치 불필요) 또는 `oracle` |
 | `DB_FILE` | `backend/data/db.json` | (`json`일 때) JSON 데이터 파일 경로 |
 | `ORACLE_USER` / `ORACLE_PASSWORD` / `ORACLE_CONNECT_STRING` | 없음 | (`oracle`일 때 필수) 계정, 비밀번호, 접속 문자열 예) `host:1521/FREEPDB1` |
-
 | `BOOKING_MAX_DAYS_AHEAD` | `3` | 예약 가능 기간(일). 지금부터 이 일수 이내의 방문 시간만 신청·수정할 수 있다. 학원 정책에 맞춰 바꾼다 |
 | `LOGIN_MAX_ATTEMPTS` / `LOGIN_LOCK_MINUTES` | `5` / `5` | 로그인 연속 실패 허용 횟수와 잠금 시간(분). 한도에 이르면 그 계정의 로그인을 잠시 막는다 |
 | `JWT_SECRET` | 서버가 뜰 때 임시 생성 | 로그인 토큰 서명 비밀키(16자 이상). 없으면 서버를 다시 켤 때 모두 다시 로그인해야 하므로 **운영에서는 반드시 지정** |
@@ -213,22 +212,6 @@ Docker에서는 같은 변수를 실행할 때 넘기면 됩니다: `DB_TYPE=ora
 | GET | `/students/:studentId/visits` | 학생의 신청 목록 (학생은 본인 것만, 강사는 누구든) | FR-VST-04 | 로그인 |
 
 권한이 "로그인"이면 강사·학생 모두, "공개"는 로그인 없이 호출할 수 있습니다. 토큰은 `Authorization: Bearer <토큰>` 헤더로 보냅니다. 응답에는 비밀번호 해시가 포함되지 않습니다.
-
---- | --- | --- | --- |
-| GET | `/study-rooms` | 자습실 목록 (삭제 제외, `currentCount`가 현재 신청 인원) | FR-ROM-01 |
-| GET | `/study-rooms/:id` | 자습실 상세 (삭제된 자습실도 조회 가능) | |
-| POST | `/study-rooms` | 등록 `{name, maxPersonnel, startDate, endDate}` | FR-ROM-02 |
-| PATCH | `/study-rooms/:id` | 수정 (보낸 필드만) | FR-ROM-04, 06 |
-| DELETE | `/study-rooms/:id` | 삭제 (Soft Delete) | FR-ROM-05 |
-| GET | `/study-rooms/:roomId/histories` | 신청·수정·취소 이력 (시간순) | FR-ROM-03 |
-| GET | `/students` | 학생 목록 (삭제 제외) | FR-STD-01 |
-| POST | `/students` | 학생 등록 `{name, phone, studentNo, guardianPhone?, grade?, memo?}` | FR-STD-02 |
-| PATCH | `/students/:id` | 학생 수정 (보낸 필드만, `status`로 재원·휴원·퇴원 변경, 선택 값은 `null`로 비움) | FR-STD-02 |
-| DELETE | `/students/:id` | 학생 삭제 (Soft Delete, 활성 신청이 있으면 거부) | FR-STD-02 |
-| POST | `/study-rooms/:roomId/visits` | 방문 신청 `{studentId, visitAt}` | FR-VST-01 |
-| PATCH | `/visits/:id` | 방문 시간 수정 `{studentId, visitAt}` | FR-VST-02 |
-| POST | `/visits/:id/cancel` | 방문 취소 `{studentId}` | FR-VST-03 |
-| GET | `/students/:studentId/visits` | 학생의 신청 목록 | FR-VST-04 |
 
 ---
 
