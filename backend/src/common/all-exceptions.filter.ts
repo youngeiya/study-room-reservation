@@ -75,6 +75,17 @@ export class AllExceptionsFilter implements ExceptionFilter {
           },
         };
       }
+      // 업로드 용량 초과(multer 가 413 으로 알려 줌): 사진 크기 제한 안내
+      if (status === 413) {
+        return {
+          status,
+          body: {
+            code: 'IMAGE_TOO_LARGE',
+            message: ErrorCode.IMAGE_TOO_LARGE.message,
+            data: null,
+          },
+        };
+      }
       // 그 외(404 등)는 상태코드로 코드명을 만든다. 예: HTTP_404
       return {
         status,

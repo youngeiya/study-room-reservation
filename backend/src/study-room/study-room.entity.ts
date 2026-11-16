@@ -16,6 +16,8 @@ export interface StudyRoom {
    * 신청 상태 변경과 같은 트랜잭션에서 갱신되고, 이 행의 version 으로 동시 신청이 충돌 감지된다.
    */
   currentCount: number;
+  /** 자습실 사진의 저장소 경로(key). 사진이 없으면 null. 사진 파일은 SeaweedFS 에 있고 DB 에는 경로만 저장한다. */
+  imageKey: string | null;
   startDate: string;
   endDate: string;
   createdAt: string;

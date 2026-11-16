@@ -1,6 +1,8 @@
-import { Inject, Injectable, OnModuleInit } from '@nestjs/common';
+import { randomUUID } from 'node:crypto';
+import { Inject, Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { BusinessException } from '../common/business.exception';
 import { Clock } from '../common/clock.service';
+import { ImageStorage, StoredImage } from '../image/image-storage';
 import { Database } from '../storage/database';
 import type { Repository } from '../storage/repository';
 import { VISIT_REPOSITORY, VisitReservation } from '../visit/visit.entity';
@@ -14,6 +16,31 @@ const SEED_ROOMS = [
   { name: '부엉이 라이브러리 2관', maxPersonnel: 10 },
   { name: '부엉이 라이브러리 3관 (소수 정예)', maxPersonnel: 5 },
 ];
+// 올릴 수 있는 사진 형식. 파일 내용의 첫 바이트(매직 넘버)로 판별한다 (확장자·Content-Type 은 속일 수 있어서)
+function sniffImage(data: Buffer): { ext: string; contentType: string } | null {
+  if (
+    data.length > 3 &&
+    data[0] === 0xff &&
+    data[1] === 0xd8 &&
+    data[2] === 0xff
+  )
+    return { ext: 'jpg', contentType: 'image/jpeg' };
+  if (
+    data.length > 8 &&
+    data
+      .subarray(0, 8)
+      .equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))
+  )
+    return { ext: 'png', contentType: 'image/png' };
+  if (
+    data.length > 12 &&
+    data.toString('ascii', 0, 4) === 'RIFF' &&
+    data.toString('ascii', 8, 12) === 'WEBP'
+  )
+    return { ext: 'webp', contentType: 'image/webp' };
+  return null;
+}
+
 // 운영 기간 최대 길이(일). 입력 실수 방지용 상한
 const MAX_PERIOD_DAYS = 366;
 
@@ -29,6 +56,8 @@ const DAY_MS = 24 * 60 * 60 * 1000;
  */
 @Injectable()
 export class StudyRoomService implements OnModuleInit {
+  private readonly logger = new Logger(StudyRoomService.name);
+
   constructor(
     @Inject(STUDY_ROOM_REPOSITORY)
     private readonly rooms: Repository<StudyRoom>,
@@ -37,6 +66,8 @@ export class StudyRoomService implements OnModuleInit {
     private readonly visits: Repository<VisitReservation>,
     private readonly db: Database,
     private readonly clock: Clock,
+    // 자습실 사진 파일 저장소 (SeaweedFS). DB 에는 경로(imageKey)만 둔다.
+    private readonly images: ImageStorage,
   ) {}
 
   /**
@@ -59,6 +90,7 @@ export class StudyRoomService implements OnModuleInit {
         await this.rooms.create({
           ...seed,
           currentCount: 0,
+          imageKey: null,
           startDate,
           endDate,
           createdAt: now,
@@ -94,6 +126,7 @@ export class StudyRoomService implements OnModuleInit {
         name: dto.name,
         maxPersonnel: dto.maxPersonnel,
         currentCount: 0, // 새 자습실은 신청이 없다
+        imageKey: null, // 사진은 등록 후 따로 올린다
         startDate,
         endDate,
         createdAt: now,
@@ -151,6 +184,75 @@ export class StudyRoomService implements OnModuleInit {
       // 모든 검사를 통과했을 때만 저장한다
       return this.rooms.update(next);
     });
+  }
+
+  /**
+   * 자습실 사진 등록·교체 (강사). 파일은 SeaweedFS 에, 경로만 DB 에 저장한다.
+   * 순서: 새 파일 저장 → DB 의 경로 교체 → 옛 파일 삭제. DB 저장이 실패하면 방금 올린 파일을 치워서 고아 파일이 남지 않게 한다.
+   */
+  async setImage(id: number, data: Buffer): Promise<StudyRoom> {
+    const kind = sniffImage(data);
+    if (!kind) throw new BusinessException('IMAGE_INVALID');
+    // 파일 이름에 랜덤 값을 넣어서, 교체하면 주소가 바뀐다 (브라우저 캐시가 옛 사진을 보여 주지 않게)
+    const key = `rooms/${id}-${randomUUID()}.${kind.ext}`;
+
+    await this.getActiveOrThrow(id); // 삭제된 자습실에는 올리지 않는다 (저장소에 쓰기 전에 확인)
+    await this.images.put(key, data, kind.contentType);
+
+    let oldKey: string | null = null;
+    try {
+      const updated = await this.db.transaction(async () => {
+        const room = await this.getActiveOrThrow(id);
+        oldKey = room.imageKey ?? null;
+        return this.rooms.update({
+          ...room,
+          imageKey: key,
+          updatedAt: this.clock.now().toISOString(),
+        });
+      });
+      await this.discard(oldKey);
+      return updated;
+    } catch (error) {
+      await this.discard(key);
+      throw error;
+    }
+  }
+
+  /** 자습실 사진 삭제 (강사). 사진이 없어도 오류가 아니다. */
+  async removeImage(id: number): Promise<StudyRoom> {
+    let oldKey: string | null = null;
+    const updated = await this.db.transaction(async () => {
+      const room = await this.getActiveOrThrow(id);
+      oldKey = room.imageKey ?? null;
+      return this.rooms.update({
+        ...room,
+        imageKey: null,
+        updatedAt: this.clock.now().toISOString(),
+      });
+    });
+    await this.discard(oldKey);
+    return updated;
+  }
+
+  /** 자습실 사진 내용. 사진이 없으면 IMAGE_NOT_FOUND (삭제된 자습실도 이력용으로 조회는 가능). */
+  async getImage(id: number): Promise<StoredImage> {
+    const room = await this.getOrThrow(id);
+    if (!room.imageKey) throw new BusinessException('IMAGE_NOT_FOUND');
+    const image = await this.images.get(room.imageKey);
+    if (!image) throw new BusinessException('IMAGE_NOT_FOUND');
+    return image;
+  }
+
+  // 저장소 파일 정리는 "최선을 다해서". 실패해도 사용자 작업은 성공으로 두고 로그만 남긴다
+  private async discard(key: string | null) {
+    if (!key) return;
+    try {
+      await this.images.delete(key);
+    } catch {
+      this.logger.warn(
+        `사진 파일 정리 실패 (고아 파일로 남을 수 있음): ${key}`,
+      );
+    }
   }
 
   /** FR-ROM-05 / FN-ROM-04: Soft Delete. 기존 신청과 이력은 그대로 남긴다. */

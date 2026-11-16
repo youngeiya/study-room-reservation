@@ -15,6 +15,12 @@ export interface Student {
   passwordHash: string | null;
   /** 학부모 연락처 (선택) */
   guardianPhone: string | null;
+  /** 우편번호 (선택, 5자리). 주소 검색으로 채운다. */
+  zipCode: string | null;
+  /** 도로명주소 (선택). 공공 주소 API 검색 결과를 저장한다. */
+  address: string | null;
+  /** 상세주소 (선택). 동·호수 등 직접 입력. */
+  addressDetail: string | null;
   /** 학년 (선택). 예) 고2 */
   grade: string | null;
   /** 강사 메모 (선택, 최대 200자) */

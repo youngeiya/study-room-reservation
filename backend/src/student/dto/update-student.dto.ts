@@ -12,6 +12,8 @@ import {
   PHONE_PATTERN,
   STUDENT_NO_MESSAGE,
   STUDENT_NO_PATTERN,
+  ZIP_CODE_MESSAGE,
+  ZIP_CODE_PATTERN,
 } from './create-student.dto';
 import { STUDENT_STATUSES } from '../student.entity';
 import type { StudentStatus } from '../student.entity';
@@ -48,6 +50,21 @@ export class UpdateStudentDto {
   @IsString()
   @Matches(PHONE_PATTERN, { message: PHONE_MESSAGE })
   guardianPhone?: string | null;
+
+  @IsOptional()
+  @IsString()
+  @Matches(ZIP_CODE_PATTERN, { message: ZIP_CODE_MESSAGE })
+  zipCode?: string | null;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(200)
+  address?: string | null;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  addressDetail?: string | null;
 
   @IsOptional()
   @IsString()

@@ -11,6 +11,9 @@ import {
 export const PHONE_PATTERN = /^0\d{1,2}-?\d{3,4}-?\d{4}$/;
 export const PHONE_MESSAGE =
   '연락처 형식이 올바르지 않습니다. 예) 010-1234-5678';
+// 우편번호(기초구역번호): 숫자 5자리
+export const ZIP_CODE_PATTERN = /^\d{5}$/;
+export const ZIP_CODE_MESSAGE = '우편번호는 숫자 5자리입니다.';
 // 학번 형식: 영문·숫자·하이픈 3~20자
 export const STUDENT_NO_PATTERN = /^[A-Za-z0-9-]{3,20}$/;
 export const STUDENT_NO_MESSAGE =
@@ -42,6 +45,21 @@ export class CreateStudentDto {
   @IsString()
   @Matches(PHONE_PATTERN, { message: PHONE_MESSAGE })
   guardianPhone?: string | null;
+
+  @IsOptional()
+  @IsString()
+  @Matches(ZIP_CODE_PATTERN, { message: ZIP_CODE_MESSAGE })
+  zipCode?: string | null;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(200)
+  address?: string | null;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  addressDetail?: string | null;
 
   @IsOptional()
   @IsString()

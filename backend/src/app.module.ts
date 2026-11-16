@@ -3,6 +3,7 @@ import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { AuthModule } from './auth/auth.module';
 import { CommonModule } from './common/common.module';
+import { ImageModule } from './image/image.module';
 import { InstructorModule } from './instructor/instructor.module';
 import { StorageModule } from './storage/storage.module';
 import { StudentModule } from './student/student.module';
@@ -17,6 +18,7 @@ import { VisitModule } from './visit/visit.module';
   imports: [
     CommonModule, // 응답 포맷, 예외 필터, Clock
     StorageModule, // JSON 파일 DB
+    ImageModule, // 이미지 저장소(SeaweedFS)
     InstructorModule, // 강사 계정
     StudentModule, // 학생
     StudyRoomModule, // 자습실

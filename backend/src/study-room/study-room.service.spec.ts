@@ -2,6 +2,7 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Clock } from '../common/clock.service';
+import { InMemoryImageStorage } from '../image/in-memory-image-storage';
 import { JsonDatabase } from '../storage/json-database';
 import { JsonRepository } from '../storage/json-repository';
 import { VISIT_COLLECTION, VisitReservation } from '../visit/visit.entity';
@@ -22,6 +23,7 @@ describe('StudyRoomService', () => {
   let rooms: JsonRepository<StudyRoom>;
   let visits: JsonRepository<VisitReservation>;
   let service: StudyRoomService;
+  let images: InMemoryImageStorage;
 
   beforeEach(async () => {
     dir = await mkdtemp(join(tmpdir(), 'room-'));
@@ -29,9 +31,10 @@ describe('StudyRoomService', () => {
     await db.init();
     rooms = new JsonRepository<StudyRoom>(db, STUDY_ROOM_COLLECTION);
     visits = new JsonRepository<VisitReservation>(db, VISIT_COLLECTION);
+    images = new InMemoryImageStorage();
     // 시각을 고정한 Clock (서비스가 new Date()를 직접 쓰지 않는 이점)
     const clock = { now: () => new Date(NOW) } as Clock;
-    service = new StudyRoomService(rooms, visits, db, clock);
+    service = new StudyRoomService(rooms, visits, db, clock, images);
   });
 
   afterEach(() => rm(dir, { recursive: true, force: true }));
@@ -107,6 +110,7 @@ describe('StudyRoomService', () => {
           name: '끝난 자습실',
           maxPersonnel: 3,
           currentCount: 0,
+          imageKey: null,
           startDate: at(-20 * DAY),
           endDate: at(-10 * DAY),
           createdAt: NOW,
@@ -225,5 +229,78 @@ describe('StudyRoomService', () => {
       service.update(room.id, { name: '변경', maxPersonnel: 1 }),
     ).rejects.toBeDefined();
     expect((await service.findOne(room.id)).name).toBe('1자습실');
+  });
+
+  describe('사진', () => {
+    const PNG = Buffer.concat([
+      Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+      Buffer.from('fake-png-body'),
+    ]);
+    const JPG = Buffer.concat([
+      Buffer.from([0xff, 0xd8, 0xff, 0xe0]),
+      Buffer.from('fake-jpg-body'),
+    ]);
+
+    it('사진을 올리면 저장소에 파일이 생기고 DB 에는 경로만 저장된다', async () => {
+      const room = await service.create({ ...base });
+      const updated = await service.setImage(room.id, PNG);
+
+      expect(updated.imageKey).toMatch(
+        new RegExp(`^rooms/${room.id}-.+\\.png$`),
+      );
+      expect(images.files.get(updated.imageKey!)?.contentType).toBe(
+        'image/png',
+      );
+      const image = await service.getImage(room.id);
+      expect(image.data.equals(PNG)).toBe(true);
+    });
+
+    it('사진을 교체하면 옛 파일은 지워지고 경로가 바뀐다', async () => {
+      const room = await service.create({ ...base });
+      const first = await service.setImage(room.id, PNG);
+      const second = await service.setImage(room.id, JPG);
+
+      expect(second.imageKey).not.toBe(first.imageKey);
+      expect(images.files.has(first.imageKey!)).toBe(false);
+      expect(images.files.size).toBe(1);
+    });
+
+    it('이미지가 아닌 파일은 거부한다 (확장자가 아니라 내용으로 판별)', async () => {
+      const room = await service.create({ ...base });
+      await expect(
+        service.setImage(room.id, Buffer.from('<script>alert(1)</script>')),
+      ).rejects.toMatchObject({ code: 'IMAGE_INVALID' });
+      expect(images.files.size).toBe(0);
+    });
+
+    it('삭제된 자습실에는 사진을 올릴 수 없고, 저장소에 파일도 남지 않는다', async () => {
+      const room = await service.create({ ...base });
+      await service.remove(room.id);
+      await expect(service.setImage(room.id, PNG)).rejects.toMatchObject({
+        code: 'ROOM_DELETED',
+      });
+      expect(images.files.size).toBe(0);
+    });
+
+    it('저장소가 실패하면 오류를 내고 DB 는 바뀌지 않는다', async () => {
+      const room = await service.create({ ...base });
+      images.failPut = true;
+      await expect(service.setImage(room.id, PNG)).rejects.toThrow();
+      expect((await service.findOne(room.id)).imageKey).toBeNull();
+    });
+
+    it('사진을 지우면 파일과 경로가 함께 사라지고, 사진이 없으면 조회는 IMAGE_NOT_FOUND', async () => {
+      const room = await service.create({ ...base });
+      await expect(service.getImage(room.id)).rejects.toMatchObject({
+        code: 'IMAGE_NOT_FOUND',
+      });
+
+      await service.setImage(room.id, PNG);
+      const removed = await service.removeImage(room.id);
+      expect(removed.imageKey).toBeNull();
+      expect(images.files.size).toBe(0);
+      // 사진이 없는 상태에서 또 지워도 오류가 아니다
+      await expect(service.removeImage(room.id)).resolves.toBeDefined();
+    });
   });
 });

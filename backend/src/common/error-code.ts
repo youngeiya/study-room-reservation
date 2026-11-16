@@ -41,6 +41,26 @@ export const ErrorCode = {
     status: HttpStatus.TOO_MANY_REQUESTS,
     message: '로그인 시도가 너무 많습니다. 잠시 후 다시 시도해 주세요.',
   },
+  IMAGE_REQUIRED: {
+    status: HttpStatus.BAD_REQUEST,
+    message: '업로드할 사진 파일을 선택해 주세요.',
+  },
+  IMAGE_INVALID: {
+    status: HttpStatus.BAD_REQUEST,
+    message: '사진은 JPG, PNG, WEBP 형식만 올릴 수 있습니다.',
+  },
+  IMAGE_TOO_LARGE: {
+    status: HttpStatus.PAYLOAD_TOO_LARGE,
+    message: '사진은 5MB 이하만 올릴 수 있습니다.',
+  },
+  IMAGE_NOT_FOUND: {
+    status: HttpStatus.NOT_FOUND,
+    message: '등록된 자습실 사진이 없습니다.',
+  },
+  IMAGE_STORAGE_FAILED: {
+    status: HttpStatus.BAD_GATEWAY,
+    message: '사진 저장소에 연결하지 못했습니다. 잠시 후 다시 시도해 주세요.',
+  },
   ROOM_NOT_FOUND: {
     status: HttpStatus.NOT_FOUND,
     message: '자습실을 찾을 수 없습니다.',

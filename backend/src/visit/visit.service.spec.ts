@@ -1,3 +1,4 @@
+import { InMemoryImageStorage } from '../image/in-memory-image-storage';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -44,7 +45,13 @@ describe('VisitService', () => {
     histories = new JsonRepository<VisitHistory>(db, VISIT_HISTORY_COLLECTION);
     now = new Date('2026-11-24T00:00:00.000Z');
     const clock = { now: () => now } as Clock; // 테스트에서 시각을 직접 움직인다
-    roomService = new StudyRoomService(rooms, visits, db, clock);
+    roomService = new StudyRoomService(
+      rooms,
+      visits,
+      db,
+      clock,
+      new InMemoryImageStorage(),
+    );
     service = new VisitService(visits, histories, rooms, students, db, clock);
   });
 
@@ -61,6 +68,9 @@ describe('VisitService', () => {
           studentNo: `T00${i}`,
           passwordHash: null,
           guardianPhone: null,
+          zipCode: null,
+          address: null,
+          addressDetail: null,
           grade: null,
           memo: null,
           status: 'ENROLLED',

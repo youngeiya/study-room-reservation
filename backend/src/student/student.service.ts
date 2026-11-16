@@ -108,6 +108,9 @@ export class StudentService implements OnModuleInit {
         for (const seed of seeds) {
           await this.students.create({
             ...seed,
+            zipCode: null,
+            address: null,
+            addressDetail: null,
             memo: null,
             status: 'ENROLLED',
             createdAt: now,
@@ -125,6 +128,7 @@ export class StudentService implements OnModuleInit {
     const targets = all.filter(
       (s) =>
         (s as Partial<Student>).status === undefined ||
+        (s as Partial<Student>).address === undefined ||
         (!s.passwordHash && !!s.studentNo),
     );
     if (targets.length > 0) {
@@ -141,6 +145,9 @@ export class StudentService implements OnModuleInit {
             studentNo: s.studentNo ?? null,
             passwordHash: hashes.get(s.id) ?? s.passwordHash ?? null,
             guardianPhone: s.guardianPhone ?? null,
+            zipCode: s.zipCode ?? null,
+            address: s.address ?? null,
+            addressDetail: s.addressDetail ?? null,
             grade: s.grade ?? null,
             memo: s.memo ?? null,
             status: s.status ?? 'ENROLLED',
@@ -171,6 +178,9 @@ export class StudentService implements OnModuleInit {
           studentNo,
           passwordHash,
           guardianPhone: normalizeOptional(dto.guardianPhone) ?? null,
+          zipCode: normalizeOptional(dto.zipCode) ?? null,
+          address: normalizeOptional(dto.address) ?? null,
+          addressDetail: normalizeOptional(dto.addressDetail) ?? null,
           grade: normalizeOptional(dto.grade) ?? null,
           memo: normalizeOptional(dto.memo) ?? null,
           status: 'ENROLLED',
@@ -205,6 +215,9 @@ export class StudentService implements OnModuleInit {
         }
 
         const guardianPhone = normalizeOptional(dto.guardianPhone);
+        const zipCode = normalizeOptional(dto.zipCode);
+        const address = normalizeOptional(dto.address);
+        const addressDetail = normalizeOptional(dto.addressDetail);
         const grade = normalizeOptional(dto.grade);
         const memo = normalizeOptional(dto.memo);
         return this.students.update({
@@ -215,6 +228,12 @@ export class StudentService implements OnModuleInit {
           passwordHash: passwordHash ?? student.passwordHash,
           guardianPhone:
             guardianPhone === undefined ? student.guardianPhone : guardianPhone,
+          zipCode: zipCode === undefined ? (student.zipCode ?? null) : zipCode,
+          address: address === undefined ? (student.address ?? null) : address,
+          addressDetail:
+            addressDetail === undefined
+              ? (student.addressDetail ?? null)
+              : addressDetail,
           grade: grade === undefined ? student.grade : grade,
           memo: memo === undefined ? student.memo : memo,
           status,

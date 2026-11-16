@@ -6,6 +6,8 @@ import { join } from 'node:path';
 import request from 'supertest';
 import { App } from 'supertest/types';
 import { AppModule } from './../src/app.module';
+import { ImageStorage } from './../src/image/image-storage';
+import { InMemoryImageStorage } from './../src/image/in-memory-image-storage';
 
 /**
  * 로그인·권한 e2e 테스트: 실제 앱을 띄우고 HTTP 로 호출해서
@@ -38,7 +40,11 @@ describe('로그인과 권한 (e2e)', () => {
 
     const moduleRef = await Test.createTestingModule({
       imports: [AppModule],
-    }).compile();
+    })
+      // 실제 SeaweedFS 대신 메모리 저장소를 쓴다
+      .overrideProvider(ImageStorage)
+      .useValue(new InMemoryImageStorage())
+      .compile();
     app = moduleRef.createNestApplication();
     // main.ts 와 같은 설정
     app.setGlobalPrefix('api');
@@ -392,6 +398,75 @@ describe('로그인과 권한 (e2e)', () => {
         .set(bearer(instructor))
         .send({ currentPassword: 'admin1234', newPassword: 'abc' })
         .expect(400);
+    });
+  });
+
+  describe('자습실 사진', () => {
+    const PNG = Buffer.concat([
+      Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+      Buffer.from('e2e-png'),
+    ]);
+
+    it('학생은 사진을 올릴 수 없고(403), 강사는 올릴 수 있다', async () => {
+      await api()
+        .post(`/api/study-rooms/${roomId}/image`)
+        .set(bearer(student1))
+        .attach('file', PNG, { filename: 'a.png', contentType: 'image/png' })
+        .expect(403);
+
+      const res = await api()
+        .post(`/api/study-rooms/${roomId}/image`)
+        .set(bearer(instructor))
+        .attach('file', PNG, { filename: 'a.png', contentType: 'image/png' })
+        .expect(201);
+      expect(res.body.data.imageKey).toMatch(/^rooms\/\d+-.+\.png$/);
+    });
+
+    it('사진은 로그인 없이도 볼 수 있고(<img> 용), 원본 그대로 내려온다', async () => {
+      const res = await api()
+        .get(`/api/study-rooms/${roomId}/image`)
+        .expect(200);
+      expect(res.headers['content-type']).toMatch(/image\/png/);
+      expect(res.headers['cache-control']).toMatch(/immutable/);
+      expect(Buffer.from(res.body as Buffer).equals(PNG)).toBe(true);
+    });
+
+    it('파일이 없거나 이미지가 아니면 400', async () => {
+      const none = await api()
+        .post(`/api/study-rooms/${roomId}/image`)
+        .set(bearer(instructor));
+      expect(none.status).toBe(400);
+      expect(none.body.code).toBe('IMAGE_REQUIRED');
+
+      const text = await api()
+        .post(`/api/study-rooms/${roomId}/image`)
+        .set(bearer(instructor))
+        .attach('file', Buffer.from('not an image'), {
+          filename: 'a.png',
+          contentType: 'image/png',
+        });
+      expect(text.status).toBe(400);
+      expect(text.body.code).toBe('IMAGE_INVALID');
+    });
+
+    it('5MB 가 넘는 파일은 413 IMAGE_TOO_LARGE', async () => {
+      const big = Buffer.concat([PNG, Buffer.alloc(5 * 1024 * 1024 + 1)]);
+      const res = await api()
+        .post(`/api/study-rooms/${roomId}/image`)
+        .set(bearer(instructor))
+        .attach('file', big, { filename: 'big.png', contentType: 'image/png' });
+      expect(res.status).toBe(413);
+      expect(res.body.code).toBe('IMAGE_TOO_LARGE');
+    });
+
+    it('사진을 지우면 조회가 404', async () => {
+      await api()
+        .delete(`/api/study-rooms/${roomId}/image`)
+        .set(bearer(instructor))
+        .expect(200);
+      const res = await api().get(`/api/study-rooms/${roomId}/image`);
+      expect(res.status).toBe(404);
+      expect(res.body.code).toBe('IMAGE_NOT_FOUND');
     });
   });
 });

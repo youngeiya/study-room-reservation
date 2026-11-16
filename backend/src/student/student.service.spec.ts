@@ -1,3 +1,4 @@
+import { InMemoryImageStorage } from '../image/in-memory-image-storage';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -46,7 +47,13 @@ describe('StudentService', () => {
     );
     const clock = { now: () => new Date(NOW) } as Clock;
     service = new StudentService(repo, visits, db, clock);
-    roomService = new StudyRoomService(rooms, visits, db, clock);
+    roomService = new StudyRoomService(
+      rooms,
+      visits,
+      db,
+      clock,
+      new InMemoryImageStorage(),
+    );
     visitService = new VisitService(visits, histories, rooms, repo, db, clock);
     seq = 0;
   });
@@ -193,6 +200,35 @@ describe('StudentService', () => {
         memo: null,
       });
       expect(updated).toMatchObject({ guardianPhone: null, memo: null });
+    });
+
+    it('주소(우편번호·도로명주소·상세주소)를 저장하고, 보내지 않으면 유지하며, null 이면 비운다', async () => {
+      const s = await service.create(
+        dto({
+          zipCode: '06236',
+          address: ' 서울특별시 강남구 테헤란로 152 ',
+          addressDetail: '5층',
+        }),
+      );
+      expect(s).toMatchObject({
+        zipCode: '06236',
+        address: '서울특별시 강남구 테헤란로 152',
+        addressDetail: '5층',
+      });
+
+      const kept = await service.update(s.id, { name: '새이름' });
+      expect(kept).toMatchObject({ zipCode: '06236', addressDetail: '5층' });
+
+      const cleared = await service.update(s.id, {
+        zipCode: null,
+        address: null,
+        addressDetail: null,
+      });
+      expect(cleared).toMatchObject({
+        zipCode: null,
+        address: null,
+        addressDetail: null,
+      });
     });
 
     it('학번을 다른 학생과 같게 바꿀 수는 없지만, 자기 학번 그대로는 괜찮다', async () => {

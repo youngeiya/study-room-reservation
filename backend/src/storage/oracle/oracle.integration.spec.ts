@@ -1,3 +1,4 @@
+import { InMemoryImageStorage } from '../../image/in-memory-image-storage';
 import oracledb from 'oracledb';
 import { Clock } from '../../common/clock.service';
 import { StudentService } from '../../student/student.service';
@@ -93,7 +94,13 @@ const iso = (offsetDays: number) =>
       db,
       clock,
     );
-    rooms = new StudyRoomService(roomRepository, visitRepository, db, clock);
+    rooms = new StudyRoomService(
+      roomRepository,
+      visitRepository,
+      db,
+      clock,
+      new InMemoryImageStorage(),
+    );
     visits = new VisitService(
       visitRepository,
       historyRepository,
@@ -159,6 +166,9 @@ const iso = (offsetDays: number) =>
       name: '홍길동',
       studentNo: 'A-100',
       guardianPhone: null,
+      zipCode: null,
+      address: null,
+      addressDetail: null,
       grade: null,
       memo: null,
       status: 'ENROLLED',
