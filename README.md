@@ -63,6 +63,8 @@ Node를 설치하지 않아도 Docker만 있으면 한 번에 실행할 수 있�
 docker compose up -d --build     # 프로젝트 루트에서
 ```
 
+컨테이너는 3개입니다: `frontend`(nginx), `backend`, 그리고 자습실 사진을 저장하는 **`seaweedfs`**(SeaweedFS). 사진 파일은 `seaweed-data` 볼륨에 보관되어 컨테이너를 다시 만들어도 남고, SeaweedFS는 외부에 포트를 열지 않아 백엔드만 접근합니다.
+
 브라우저에서 **http://localhost:8080** 에 접속합니다. 8080이 이미 사용 중이면 포트를 바꿔 실행합니다.
 
 ```bash
@@ -116,7 +118,7 @@ docker compose up -d --build
 
 ### 로그인과 화면 사용법
 
-처음 화면은 **로그인**입니다. **라디오 버튼으로 강사/학생을 고르고** 로그인하면, 역할에 따라 서로 다른 화면(상단바 색·메뉴·할 수 있는 일)이 열립니다.
+처음 화면은 **로그인**입니다. **라디오 버튼으로 강사/학생을 고르고** 로그인하면, 역할에 따라 서로 다른 화면(헤더 제목·메뉴·할 수 있는 일)이 열립니다.
 
 | 로그인 유형 | 로그인 아이디 | 열리는 화면 | 할 수 있는 일 |
 | --- | --- | --- | --- |
@@ -173,7 +175,7 @@ ORACLE_TEST_USER=... ORACLE_TEST_PASSWORD=... ORACLE_TEST_CONNECT_STRING=호스�
 
 기본은 JSON 파일이라 아무 설정이 필요 없습니다. 실서비스를 가정해 **같은 서비스 코드를 Oracle에서도 실행**할 수 있게 했고, 환경 변수만 바꾸면 전환됩니다.
 
-1. [db/oracle/](db/oracle/)의 SQL로 스키마를 만듭니다 (`01_create_user.sql` → `02_schema.sql` → `03_seed.sql`). 로그인 기능이 생기기 전에 만든 스키마라면 `05_auth_migration.sql`을 추가로 실행합니다.
+1. [db/oracle/](db/oracle/)의 SQL로 스키마를 만듭니다 (`01_create_user.sql` → `02_schema.sql` → `03_seed.sql`). 로그인 기능이 생기기 전에 만든 스키마라면 `05_auth_migration.sql`을 추가로, 주소 필드가 생기기 전에 만든 스키마라면 `06_address_migration.sql`, 자습실 사진 기능이 생기기 전에 만든 스키마라면 `07_room_image_migration.sql`도 실행합니다.
 2. 환경 변수를 설정하고 백엔드를 실행합니다. 프론트엔드는 바꿀 것이 없습니다.
 
 ```bash
@@ -201,9 +203,12 @@ Docker에서는 같은 변수를 실행할 때 넘기면 됩니다: `DB_TYPE=ora
 | POST | `/study-rooms` | 등록 `{name, maxPersonnel, startDate, endDate}` | FR-ROM-02 | 강사 |
 | PATCH | `/study-rooms/:id` | 수정 (보낸 필드만) | FR-ROM-04, 06 | 강사 |
 | DELETE | `/study-rooms/:id` | 삭제 (Soft Delete) | FR-ROM-05 | 강사 |
+| GET | `/study-rooms/:id/image` | 자습실 사진 원본(이미지 응답). `<img>`가 토큰을 보낼 수 없어 **로그인 없이** 볼 수 있다 | 추가 | 공개 |
+| POST | `/study-rooms/:id/image` | 사진 등록·교체 (multipart `file`, JPG·PNG·WEBP, 5MB 이하) | 추가 | 강사 |
+| DELETE | `/study-rooms/:id/image` | 사진 삭제 | 추가 | 강사 |
 | GET | `/study-rooms/:roomId/histories` | 신청·수정·취소 이력 (시간순) | FR-ROM-03 | 강사 |
 | GET | `/students` | 학생 목록 (삭제 제외) | FR-STD-01 | 강사 |
-| POST | `/students` | 학생 등록 `{name, phone, studentNo, password?, guardianPhone?, grade?, memo?}` | FR-STD-02 | 강사 |
+| POST | `/students` | 학생 등록 `{name, phone, studentNo, password?, guardianPhone?, zipCode?, address?, addressDetail?, grade?, memo?}` | FR-STD-02 | 강사 |
 | PATCH | `/students/:id` | 학생 수정 (보낸 필드만, `status`로 재원·휴원·퇴원 변경, `password`로 재설정, 선택 값은 `null`로 비움) | FR-STD-02 | 강사 |
 | DELETE | `/students/:id` | 학생 삭제 (Soft Delete, 활성 신청이 있으면 거부) | FR-STD-02 | 강사 |
 | POST | `/study-rooms/:roomId/visits` | 방문 신청 `{visitAt}` (신청자는 토큰의 학생) | FR-VST-01 | 학생 |
@@ -220,16 +225,19 @@ Docker에서는 같은 변수를 실행할 때 넘기면 됩니다: `DB_TYPE=ora
 | 영역 | 선택 | 이유 |
 | --- | --- | --- |
 | 프론트엔드 | Vue 3 (Composition API, `<script setup>`), TypeScript, Vite | 과제 필수 스택. 타입을 두어 서버 응답 모양을 화면 코드에서 컴파일 시점에 확인 |
-| UI | Vuetify 3 (Material Design) | 상단바·왼쪽 메뉴·카드·표 등 기본 부품을 제공하고, 좁은 화면에서는 메뉴가 햄버거 버튼으로 바뀌는 반응형 레이아웃을 쉽게 구성 |
+| UI | Vuetify 3 (Material Design) | 헤더·메뉴·카드·표 등 기본 부품을 제공하고, 좁은 화면에서는 메뉴가 햄버거 버튼으로 바뀌는 반응형 레이아웃을 쉽게 구성 |
 | 상태 관리 | Pinia | "지금 누구로 보고 있는가(역할·학생)"만 전역 상태. 서버 데이터는 각 화면이 직접 불러와 상태를 단순하게 유지 |
 | 라우팅 | Vue Router | 화면별 역할 제한(강사 전용·학생 전용)을 라우트 메타와 가드로 선언 |
 | 백엔드 | NestJS, TypeScript | 과제 필수 스택. Module/Controller/Service/Provider 구조와 DI, Pipe·Filter·Interceptor가 계층 분리에 적합 |
 | 입력 검증 | class-validator + `ValidationPipe` | DTO에 규칙을 선언하고 컨트롤러에 들어오기 전에 한 곳에서 검사. 정의되지 않은 필드는 거부 |
 | 저장소 | JSON 파일(기본) / Oracle + `Database`·`Repository` 추상화 | JSON 은 과제에서 허용한 방식으로 설치 없이 바로 실행. 서비스는 추상 클래스에만 의존하므로 환경 변수(`DB_TYPE`)로 Oracle 구현체로 전환 (`oracledb` Thin 모드) |
+| 사진 저장 | SeaweedFS (Filer HTTP API) | 이미지 파일을 DB 가 아닌 파일 저장소에 두고, DB 에는 경로(`imageKey`)만 저장한다. 파일이 DB 를 키우지 않고 나중에 서버를 늘려도 저장소를 공유할 수 있다. 저장소 접근은 `ImageStorage` 추상 클래스 뒤에 숨겨서(`Database` 와 같은 방식) 구현을 바꿔도 서비스는 그대로다 |
 | 테스트 | Jest(백엔드), Vitest(프론트엔드) | 각 프레임워크의 기본 구성을 그대로 사용 |
 | 배포(선택) | Docker, Docker Compose, nginx | 환경 차이 없이 명령 한 줄로 실행. 정적 파일 서빙과 `/api` 프록시를 nginx가 맡아 개발 환경과 같은 호출 경로를 유지 |
 
 화면은 UI 라이브러리 **Vuetify**(Material Design)로 구성했습니다. 직접 스타일을 만드는 데 시간을 쓰기보다 서버 규칙과 설계에 집중하고, 카드·표·대화상자·반응형 메뉴 같은 기본 부품을 일관되게 쓰기 위해서입니다. (React의 MUI와 같은 Material Design을 Vue용으로 구현한 라이브러리입니다.)
+
+화면의 시대인재 로고(`frontend/public/logo.png`)는 시대인재의 상표이며, 이 과제의 시연 용도로만 사용했습니다. 원본 비율과 색을 바꾸지 않고, 원본의 가장자리 여백만 잘라 보여 줍니다(`BrandLogo.vue`). 전체 화면은 시대인재 홈페이지의 분위기(흰 배경, 검정 포인트, 가는 선, 상단 텍스트 메뉴, 큰 제목, Pretendard 글꼴)에 맞춰 Vuetify 테마(`plugins/vuetify.ts`)와 전역 스타일(`assets/main.css`)로 통일했습니다. 글꼴은 CDN에서 불러오며, 불러오지 못하면 시스템 글꼴로 대신합니다.
 
 ---
 
@@ -368,6 +376,7 @@ erDiagram
 | name, phone | string | 이름, 연락처 (과제 필수 필드) |
 | studentNo | string \| null | **학번(수강번호)**. 삭제되지 않은 학생끼리는 중복 불가 (부분 유니크). 동명이인·같은 번호를 구분하는 기준 |
 | guardianPhone | string \| null | 학부모 연락처 (선택). 미성년 학생이 많은 학원에서 보호자 연락에 필요 |
+| zipCode, address, addressDetail | string \| null | 우편번호(5자리)·도로명주소·상세주소 (선택). **카카오(다음) 우편번호 서비스** 팝업에서 고른 값을 저장하고 상세주소(동·호수)만 직접 입력. 승인키가 필요 없고 브라우저가 카카오 스크립트를 불러와 검색하며(데이터는 행정안전부 도로명주소 DB 기반), 서버는 검색에 관여하지 않는다 |
 | grade | string \| null | 학년 (선택). 예) 고2 |
 | memo | string \| null | 강사 메모 (선택, 최대 200자) |
 | passwordHash | string \| null | **비밀번호 해시**(scrypt, salt 포함). 원문은 저장하지 않고 API 응답에도 내려주지 않는다. 학생의 로그인 아이디는 학번 |
@@ -398,6 +407,7 @@ erDiagram
 | **name** | string | *추가 필드.* 화면에서 자습실을 구분하기 위함 |
 | maxPersonnel | number | 최대 인원 (1 이상) |
 | **currentCount** | number | *추가 필드.* 현재 신청 인원(취소 제외). 신청 시 +1, 취소 시 −1 |
+| **imageKey** | string \| null | *추가 필드.* 자습실 사진의 저장소 경로 (예: `rooms/1-<무작위>.png`). 사진 파일은 SeaweedFS 에 있다. 사진을 바꾸면 경로가 달라져 브라우저 캐시가 옛 사진을 보여 주지 않는다 |
 | startDate, endDate | datetime | 운영 기간 (시작 < 종료) |
 | createdAt, updatedAt | datetime | |
 | deletedAt | datetime \| null | Soft Delete |
@@ -470,6 +480,8 @@ B: 커밋 — version 5 != 6 → 충돌 → 처음부터 재시도 → 10/10 을
 | `03_seed.sql` | 예시 데이터 (앱의 시드와 동일) |
 | `04_queries.sql` | 신청·취소·수정·삭제·로그인 등 핵심 쿼리와 낙관적 락 UPDATE 예시 |
 | `05_auth_migration.sql` | 로그인 기능 이전에 만든 스키마에 `student.password_hash`와 `instructor` 테이블을 추가하는 마이그레이션 |
+| `06_address_migration.sql` | 주소 기능 이전에 만든 스키마에 `student.zip_code`, `address`, `address_detail` 컬럼을 추가하는 마이그레이션 |
+| `07_room_image_migration.sql` | 사진 기능 이전에 만든 스키마에 `study_room.image_key` 컬럼을 추가하는 마이그레이션 |
 
 서비스에서 하던 검사의 최종 방어선을 DB 제약으로도 둡니다. 예를 들어 `CHECK (current_count BETWEEN 0 AND max_personnel)`로 정원 초과·음수를 막고, 함수 기반 유니크 인덱스로 "삭제되지 않은 학생끼리 학번 유일"과 "학생당 활성 신청 한 건"을 보장합니다. 위반 쿼리를 직접 실행해 제약이 거부하는 것과, `WHERE version = ?` 조건의 UPDATE 가 충돌 시 0행을 반환하는 것을 확인했습니다.
 
@@ -535,6 +547,7 @@ B: 커밋 — version 5 != 6 → 충돌 → 처음부터 재시도 → 10/10 을
 - **한 자습실에 신청이 몰리면 재시도가 늘어납니다.** 정원 보호 기준이 자습실 행 하나이기 때문입니다. 재시도를 모두 써도 충돌하면 409로 응답하고 사용자가 다시 시도하도록 했습니다.
 - 정원은 자습실 전체 기준이고 시간대별로 나누지 않았습니다 (예: 7시 신청자와 8시 신청자를 따로 세기).
 - **인증은 최소한으로 구현했습니다.** 비밀번호는 scrypt 해시로 저장하고 토큰(JWT)에 서명하며, 같은 계정의 연속 로그인 실패는 일정 시간 잠급니다. 다만 **잠금 기록은 서버 메모리에 보관**해서 서버를 다시 켜면 초기화되고 서버가 여러 대면 서버마다 따로 셉니다(여러 대에서는 공유 저장소가 필요). 계정 기준이라 누군가 일부러 남의 계정으로 실패를 반복해 잠글 수도 있고(IP 기준 제한은 reverse proxy 뒤에서 실제 IP를 받는 설정이 먼저 필요), 발급한 토큰의 중간 취소(로그아웃해도 만료 전 토큰은 서버에서 무효화되지 않음), 토큰을 `localStorage`에 두는 데서 오는 XSS 위험은 다루지 않았습니다. 학생이 삭제·퇴원되어도 이미 발급된 토큰은 만료 전까지 유효하지만, 신청은 서비스가 학생 상태를 매번 검사해 막고 `/auth/me`는 거부합니다. 실서비스에서는 HTTPS, 리프레시 토큰이 필요합니다.
+- **사진은 정상 흐름에서만 일관성을 보장합니다.** 파일 저장소와 DB 는 하나의 트랜잭션으로 묶을 수 없어서, 업로드 순서를 "새 파일 저장 → DB 경로 교체 → 옛 파일 삭제"로 하고 중간에 실패하면 방금 올린 파일을 지웁니다. 그래도 서버가 그 사이에 죽으면 쓰이지 않는 파일이 저장소에 남을 수 있습니다(주기적인 정리 작업은 만들지 않았습니다). 사진 주소는 로그인 없이 열리며, 자습실 사진은 개인정보가 아니라는 판단입니다.
 - 목록 페이지네이션이 없고, 프론트엔드 자동 테스트는 날짜 변환 유틸에 한정됩니다 (화면 단위·E2E 테스트 없음. 화면은 헤드리스 브라우저로 직접 시나리오를 확인했지만 코드로 남기지는 않았습니다). 백엔드는 서비스 단위 테스트, 로그인·권한 e2e(HTTP), Oracle 통합 테스트가 있습니다.
 - **DB 수준의 제약은 Oracle 모드에서만 있습니다.** Oracle 스키마(`db/oracle/02_schema.sql`)에는 "삭제되지 않은 학생끼리 학번 유일", "학생당 활성 신청 한 건"(함수 기반 유니크 인덱스), "정원 범위"(CHECK) 등이 있어 서비스 검사가 뚫려도 DB가 최종으로 막습니다 (위반 쿼리를 직접 실행해 확인). JSON 모드에는 DB가 없으므로 학번 유일은 커밋 때 검사하는 저장소 제약으로, "학생당 활성 신청 한 건"은 서비스 로직과 version(같은 자습실은 자습실 행, 다른 자습실 동시 신청은 학생 행)으로 보장합니다.
 - (Oracle 모드) 조회를 JSON 구현과 같은 의미로 유지하려고 `findAll(조건 함수)`를 **테이블 전체를 읽은 뒤 코드에서 거르는 방식**으로 구현했습니다. 데이터가 많아지면 조건을 SQL `WHERE`로 내려야 합니다 (`Repository` 인터페이스 뒤에 있어 서비스 코드는 바뀌지 않습니다).
