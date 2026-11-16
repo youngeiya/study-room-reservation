@@ -2,8 +2,9 @@ export type VisitStatus = 'ACTIVE' | 'CANCELLED';
 export type VisitAction = 'CREATE' | 'UPDATE' | 'CANCEL';
 
 /**
- * 방문 신청 (현재 상태). 학생 한 명이 자습실 하나에 대해 가지는 "현재의" 신청이다.
- * 수정·취소하면 이 행은 갱신되고, 변경 내역은 VisitHistory에 따로 쌓인다.
+ * 방문 신청 (현재 상태). 신청 한 건이 한 행이다 (한 학생은 하루(한국 시간)에 활성 신청을 한 건만 가질 수 있다).
+ * 수정·취소하면 이 행은 갱신되고(취소해도 행은 남는다), 변경 내역은 VisitHistory에 따로 쌓인다.
+ * 취소한 뒤 다시 신청하면 이 행을 되살리지 않고 새 행을 만든다.
  */
 export interface VisitReservation {
   id: number;
