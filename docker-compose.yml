@@ -8,6 +8,10 @@ services:
       ORACLE_USER: ${ORACLE_USER:-}
       ORACLE_PASSWORD: ${ORACLE_PASSWORD:-}
       ORACLE_CONNECT_STRING: ${ORACLE_CONNECT_STRING:-}
+      # 로그인: 운영에서는 JWT_SECRET(16자 이상)과 강사 계정을 반드시 지정한다
+      JWT_SECRET: ${JWT_SECRET:-}
+      INSTRUCTOR_ID: ${INSTRUCTOR_ID:-admin}
+      INSTRUCTOR_PASSWORD: ${INSTRUCTOR_PASSWORD:-admin1234}
     volumes:
       # JSON DB(db.json)를 named volume 에 보관 -> 컨테이너를 다시 만들어도 데이터 유지
       - db-data:/app/data
