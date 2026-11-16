@@ -1,6 +1,7 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import type { Role } from '@/api/types'
 import { useSessionStore } from '@/stores/session'
+import { homeOf } from './home'
 import InstructorLayout from '@/layouts/InstructorLayout.vue'
 import StudentLayout from '@/layouts/StudentLayout.vue'
 import LoginView from '@/views/LoginView.vue'
@@ -13,10 +14,6 @@ declare module 'vue-router' {
     public?: boolean
   }
 }
-
-// 역할별 첫 화면
-export const homeOf = (role: Role) =>
-  role === 'INSTRUCTOR' ? '/instructor/rooms' : '/student/rooms'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),

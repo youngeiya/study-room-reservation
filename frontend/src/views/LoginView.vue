@@ -5,7 +5,7 @@ import type { SubmitEventPromise } from 'vuetify'
 import { mdiEye, mdiEyeOff, mdiOwl } from '@mdi/js'
 import type { Role } from '@/api/types'
 import { useAction } from '@/composables/useAction'
-import { homeOf } from '@/router'
+import { homeOf } from '@/router/home'
 import { useSessionStore } from '@/stores/session'
 
 const router = useRouter()
