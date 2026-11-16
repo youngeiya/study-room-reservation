@@ -46,6 +46,14 @@ export function maxDaysAhead(): number {
   return Number.isFinite(n) && n > 0 ? n : DEFAULT_MAX_DAYS_AHEAD;
 }
 
+// "하루"의 기준은 한국 시간(UTC+9). 방문 시각(UTC)을 한국 날짜(YYYY-MM-DD)로 바꿔 같은 날인지 비교한다.
+const KST_OFFSET_MS = 9 * 60 * 60 * 1000;
+export function kstDay(visitAtIso: string): string {
+  return new Date(Date.parse(visitAtIso) + KST_OFFSET_MS)
+    .toISOString()
+    .slice(0, 10);
+}
+
 @Injectable()
 export class VisitService {
   constructor(
@@ -74,48 +82,29 @@ export class VisitService {
       this.assertWithinPeriod(room, visitAt); // 운영 기간 안인지
       this.assertBookable(visitAt); // 지금부터 N일 이내인지 (과거·너무 먼 날짜 거부)
 
-      // 이 학생의 신청 전체 (취소된 것 포함). 한 학생은 "모든 자습실을 통틀어" 활성 신청을 한 건만 가질 수 있다.
-      const mine = await this.visits.findAll(
-        (v) => v.studentId === dto.studentId,
-      );
-      const active = mine.find((v) => v.status === 'ACTIVE');
-      if (active) {
-        // 같은 자습실이면 중복 신청, 다른 자습실이면 어느 자습실인지 알려 준다
-        throw active.roomId === roomId
-          ? new BusinessException('ALREADY_APPLIED')
-          : new BusinessException('ALREADY_APPLIED_OTHER_ROOM', {
-              roomId: active.roomId,
-            });
-      }
+      // 한 학생은 하루(한국 시간 기준)에 활성 신청을 한 건만 가질 수 있다 (자습실이 달라도 마찬가지).
+      // 다른 날짜의 신청은 따로 할 수 있다.
+      await this.assertNoOtherVisitThatDay(dto.studentId, visitAt, roomId);
       if (room.currentCount >= room.maxPersonnel) {
         throw new BusinessException('ROOM_FULL'); // 정원 초과
       }
-      // 이 자습실에 취소했던 신청이 있으면 그 행을 되살린다 (학생당 자습실당 신청 행은 하나만 둔다)
-      const existing = mine.find((v) => v.roomId === roomId);
 
       const now = this.clock.now().toISOString();
-      // 취소했던 신청이 있으면 그 행을 다시 ACTIVE 로 되살리고, 없으면 새로 만든다.
-      const reservation = existing
-        ? await this.visits.update({
-            ...existing,
-            status: 'ACTIVE',
-            visitAt,
-            updatedAt: now,
-          })
-        : await this.visits.create({
-            roomId,
-            studentId: dto.studentId,
-            visitAt,
-            status: 'ACTIVE',
-            createdAt: now,
-            updatedAt: now,
-          });
+      // 신청은 항상 새 행으로 만든다 (취소된 옛 신청은 그대로 남아 이력과 맞는다)
+      const reservation = await this.visits.create({
+        roomId,
+        studentId: dto.studentId,
+        visitAt,
+        status: 'ACTIVE',
+        createdAt: now,
+        updatedAt: now,
+      });
 
       await this.recordHistory(reservation, 'CREATE', null, visitAt, now);
       await this.changeCount(room, +1, now);
-      // 같은 학생이 서로 다른 자습실에 동시에 신청하는 경우를 잡으려고 학생 행도 "건드려서" version 을 올린다.
+      // 같은 학생이 같은 날 서로 다른 자습실에 동시에 신청하는 경우를 잡으려고 학생 행도 "건드려서" version 을 올린다.
       // (자습실 행은 방마다 달라서, 방이 다르면 자습실 version 검사만으로는 충돌이 감지되지 않는다.
-      //  학생 행이 "이 학생의 활성 신청은 한 건" 규칙의 문지기 역할을 한다)
+      //  학생 행이 "하루에 활성 신청은 한 건" 규칙의 문지기 역할을 한다)
       await this.students.update(student);
       return reservation;
     });
@@ -134,6 +123,13 @@ export class VisitService {
 
       if (visit.visitAt === visitAt) return visit; // 바뀐 게 없으면 이력도 남기지 않는다
       this.assertBookable(visitAt); // 바꾸려는 시간도 같은 예약 가능 기간 안이어야 한다
+      // 옮겨 가는 날짜에 이미 다른 활성 신청이 있으면 거부한다 (자기 자신은 제외)
+      await this.assertNoOtherVisitThatDay(
+        visit.studentId,
+        visitAt,
+        visit.roomId,
+        visit.id,
+      );
 
       const now = this.clock.now().toISOString();
       const updated = await this.visits.update({
@@ -145,6 +141,10 @@ export class VisitService {
       // 인원은 그대로지만 자습실 행을 "건드려서" version 을 올린다.
       // 자습실의 운영 기간을 바꾸는 요청과 동시에 일어나면 한쪽이 충돌로 감지되어 다시 검사하게 하려는 것.
       await this.rooms.update(room);
+      // 같은 학생의 다른 신청과 동시에 같은 날로 옮기는 경우를 잡으려고 학생 행도 건드린다 (신청 때와 같은 이유)
+      await this.students.update(
+        await this.getActiveStudentOrThrow(visit.studentId),
+      );
       return updated;
     });
   }
@@ -241,6 +241,34 @@ export class VisitService {
     const room = await this.rooms.findById(id);
     if (!room) throw new BusinessException('ROOM_NOT_FOUND');
     return room;
+  }
+
+  /**
+   * 같은 날(한국 시간)에 이 학생의 다른 활성 신청이 있으면 거부한다.
+   * 같은 자습실이면 ALREADY_APPLIED, 다른 자습실이면 ALREADY_APPLIED_OTHER_ROOM(어느 자습실인지 포함).
+   */
+  private async assertNoOtherVisitThatDay(
+    studentId: number,
+    visitAt: string,
+    roomId: number,
+    exceptVisitId?: number,
+  ) {
+    const day = kstDay(visitAt);
+    const sameDay = await this.visits.findAll(
+      (v) =>
+        v.studentId === studentId &&
+        v.status === 'ACTIVE' &&
+        v.id !== exceptVisitId &&
+        kstDay(v.visitAt) === day,
+    );
+    const other = sameDay[0];
+    if (!other) return;
+    throw other.roomId === roomId
+      ? new BusinessException('ALREADY_APPLIED', { visitId: other.id, day })
+      : new BusinessException('ALREADY_APPLIED_OTHER_ROOM', {
+          roomId: other.roomId,
+          day,
+        });
   }
 
   // 신청·수정은 삭제된 자습실에는 할 수 없다

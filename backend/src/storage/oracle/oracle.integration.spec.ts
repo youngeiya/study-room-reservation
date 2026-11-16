@@ -35,6 +35,14 @@ const enabled = !!(user && password && connectString);
 const day = 24 * 60 * 60 * 1000;
 const iso = (offsetDays: number) =>
   new Date(Date.now() + offsetDays * day).toISOString();
+// "오늘 + offsetDays 일(한국 시간)"의 kstHour 시 정각. 같은 한국 날짜인지가 중요한 테스트에서 쓴다.
+const KST_MS = 9 * 60 * 60 * 1000;
+const kstAt = (offsetDays: number, kstHour: number) => {
+  const kstMidnight = Math.floor((Date.now() + KST_MS) / day) * day;
+  return new Date(
+    kstMidnight + offsetDays * day + kstHour * 60 * 60 * 1000 - KST_MS,
+  ).toISOString();
+};
 
 (enabled ? describe : describe.skip)('Oracle 통합 테스트', () => {
   let db: OracleDatabase;
@@ -282,17 +290,44 @@ const iso = (offsetDays: number) =>
     await countMatches(room.id);
   });
 
-  it('같은 학생이 서로 다른 자습실에 동시에 신청하면 한 건만 성공한다', async () => {
+  it('같은 학생이 같은 날(한국 시간) 서로 다른 자습실에 동시에 신청하면 한 건만 성공한다', async () => {
     const s = await newStudent();
     const r1 = await newRoom();
     const r2 = await newRoom();
 
     const results = await Promise.allSettled([
-      visits.create(r1.id, { studentId: s.id, visitAt: iso(2) }),
-      visits.create(r2.id, { studentId: s.id, visitAt: iso(2.5) }),
+      visits.create(r1.id, { studentId: s.id, visitAt: kstAt(1, 10) }),
+      visits.create(r2.id, { studentId: s.id, visitAt: kstAt(1, 14) }),
     ]);
 
     expect(results.filter((r) => r.status === 'fulfilled')).toHaveLength(1);
+    await countMatches(r1.id);
+    await countMatches(r2.id);
+  });
+
+  it('날짜가 다르면 같은 자습실·다른 자습실에도 신청할 수 있고, 다른 신청이 있는 날로는 수정할 수 없다', async () => {
+    const s = await newStudent();
+    const r1 = await newRoom();
+    const r2 = await newRoom();
+
+    const first = await visits.create(r1.id, {
+      studentId: s.id,
+      visitAt: kstAt(1, 10),
+    });
+    await expect(
+      visits.create(r1.id, { studentId: s.id, visitAt: kstAt(2, 10) }),
+    ).resolves.toMatchObject({ status: 'ACTIVE' });
+    const third = await visits.create(r2.id, {
+      studentId: s.id,
+      visitAt: kstAt(3, 0), // 오늘 + 3일 한국 자정 (예약 가능 기간 안, 앞의 두 신청과 다른 날)
+    });
+    expect(third.status).toBe('ACTIVE');
+
+    // 이미 신청이 있는 날(내일 +1)로 옮기려는 수정은 거부
+    await expect(
+      visits.update(first.id, { studentId: s.id, visitAt: kstAt(2, 11) }),
+    ).rejects.toMatchObject({ code: 'ALREADY_APPLIED' });
+
     await countMatches(r1.id);
     await countMatches(r2.id);
   });

@@ -96,12 +96,13 @@ export const ErrorCode = {
   },
   ALREADY_APPLIED: {
     status: HttpStatus.CONFLICT,
-    message: '이미 신청한 자습실입니다.',
+    message:
+      '같은 날짜에 이미 이 자습실을 신청했습니다. 시간을 바꾸려면 시간 수정을 이용해 주세요.',
   },
   ALREADY_APPLIED_OTHER_ROOM: {
     status: HttpStatus.CONFLICT,
     message:
-      '다른 자습실에 이미 방문을 신청했습니다. 기존 신청을 취소한 뒤 신청해 주세요.',
+      '같은 날짜에 다른 자습실을 이미 신청했습니다. 하루에 한 건만 신청할 수 있어요. 기존 신청을 취소한 뒤 신청해 주세요.',
   },
   VISIT_IN_PAST: {
     status: HttpStatus.BAD_REQUEST,

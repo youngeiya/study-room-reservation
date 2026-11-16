@@ -23,6 +23,8 @@ const START = '2026-11-20T00:00:00.000Z';
 const END = '2026-11-30T00:00:00.000Z';
 const DAY25 = '2026-11-25T09:00:00.000Z';
 const DAY26 = '2026-11-26T09:00:00.000Z';
+// DAY25 와 같은 한국 날짜(11/25)의 다른 시각 (UTC 01:00 = 한국 10:00)
+const DAY25_MORNING = '2026-11-25T01:00:00.000Z';
 
 describe('VisitService', () => {
   let dir: string;
@@ -213,16 +215,16 @@ describe('VisitService', () => {
     });
   });
 
-  // ── 한 학생은 모든 자습실을 통틀어 활성 신청 1건 ───────────────
-  describe('다른 자습실에 이미 신청한 학생', () => {
-    it('다른 자습실에는 시간이 달라도 신청할 수 없고, 인원·이력은 바뀌지 않는다', async () => {
+  // ── 한 학생은 하루(한국 시간)에 활성 신청 1건 (자습실이 달라도) ──
+  describe('같은 날 이미 신청한 학생', () => {
+    it('다른 자습실에도 같은 날(한국 시간)에는 신청할 수 없고, 인원·이력은 바뀌지 않는다', async () => {
       const [s1] = await seedStudents(1);
       const room1 = await makeRoom();
       const room2 = await makeRoom();
       await service.create(room1.id, { studentId: s1, visitAt: DAY25 });
 
       await expect(
-        service.create(room2.id, { studentId: s1, visitAt: DAY26 }),
+        service.create(room2.id, { studentId: s1, visitAt: DAY25_MORNING }),
       ).rejects.toMatchObject({
         code: 'ALREADY_APPLIED_OTHER_ROOM',
         data: { roomId: room1.id },
@@ -233,14 +235,78 @@ describe('VisitService', () => {
       await expectCountMatches(room2.id);
     });
 
-    it('같은 자습실에 다시 신청하면 기존처럼 ALREADY_APPLIED 이다', async () => {
+    it('같은 자습실이라도 같은 날에는 ALREADY_APPLIED 이다', async () => {
       const [s1] = await seedStudents(1);
       const room1 = await makeRoom();
       await service.create(room1.id, { studentId: s1, visitAt: DAY25 });
 
       await expect(
-        service.create(room1.id, { studentId: s1, visitAt: DAY26 }),
+        service.create(room1.id, { studentId: s1, visitAt: DAY25_MORNING }),
       ).rejects.toMatchObject({ code: 'ALREADY_APPLIED' });
+    });
+
+    it('다른 날짜라면 같은 자습실에도, 다른 자습실에도 신청할 수 있다', async () => {
+      const [s1] = await seedStudents(1);
+      const room1 = await makeRoom();
+      const room2 = await makeRoom();
+      await service.create(room1.id, { studentId: s1, visitAt: DAY25 });
+
+      await expect(
+        service.create(room1.id, { studentId: s1, visitAt: DAY26 }),
+      ).resolves.toMatchObject({ status: 'ACTIVE' });
+      await expect(
+        service.create(room2.id, {
+          studentId: s1,
+          visitAt: '2026-11-26T16:00:00.000Z',
+        }),
+      ).resolves.toMatchObject({ status: 'ACTIVE' });
+      expect(await visits.findAll((v) => v.status === 'ACTIVE')).toHaveLength(
+        3,
+      );
+      await expectCountMatches(room1.id);
+      await expectCountMatches(room2.id);
+    });
+
+    it('하루의 기준은 한국 시간이다 (23:59 와 00:00 은 다른 날)', async () => {
+      const [s1] = await seedStudents(1);
+      const room = await makeRoom();
+      // UTC 14:59 = 한국 11/25 23:59, UTC 15:00 = 한국 11/26 00:00
+      await service.create(room.id, {
+        studentId: s1,
+        visitAt: '2026-11-25T14:59:00.000Z',
+      });
+      await expect(
+        service.create(room.id, {
+          studentId: s1,
+          visitAt: '2026-11-25T15:00:00.000Z',
+        }),
+      ).resolves.toMatchObject({ status: 'ACTIVE' });
+      // 한국 11/25 새벽(UTC 11/24 16:00)은 첫 신청과 같은 날
+      await expect(
+        service.create(room.id, {
+          studentId: s1,
+          visitAt: '2026-11-24T16:00:00.000Z',
+        }),
+      ).rejects.toMatchObject({ code: 'ALREADY_APPLIED' });
+    });
+
+    it('시간 수정으로 다른 신청이 있는 날로 옮길 수는 없다', async () => {
+      const [s1] = await seedStudents(1);
+      const room1 = await makeRoom();
+      const room2 = await makeRoom();
+      const first = await service.create(room1.id, {
+        studentId: s1,
+        visitAt: DAY25,
+      });
+      await service.create(room2.id, { studentId: s1, visitAt: DAY26 });
+
+      await expect(
+        service.update(first.id, { studentId: s1, visitAt: DAY26 }),
+      ).rejects.toMatchObject({ code: 'ALREADY_APPLIED_OTHER_ROOM' });
+      // 같은 날 안에서 시각만 바꾸는 것은 자기 자신과는 겹치지 않으므로 가능하다
+      await expect(
+        service.update(first.id, { studentId: s1, visitAt: DAY25_MORNING }),
+      ).resolves.toMatchObject({ visitAt: DAY25_MORNING });
     });
 
     it('다른 학생은 다른 자습실에 신청할 수 있다', async () => {
@@ -276,7 +342,7 @@ describe('VisitService', () => {
 
       const results = await Promise.allSettled([
         service.create(room1.id, { studentId: s1, visitAt: DAY25 }),
-        service.create(room2.id, { studentId: s1, visitAt: DAY26 }),
+        service.create(room2.id, { studentId: s1, visitAt: DAY25_MORNING }),
       ]);
 
       expect(results.filter((r) => r.status === 'fulfilled')).toHaveLength(1);
@@ -329,12 +395,12 @@ describe('VisitService', () => {
     await expectCountMatches(room.id);
   });
 
-  it('같은 학생이 같은 자습실에 다시 신청하면 ALREADY_APPLIED', async () => {
+  it('같은 학생이 같은 자습실에 같은 날 다시 신청하면 ALREADY_APPLIED', async () => {
     const [s1] = await seedStudents(1);
     const room = await makeRoom();
     await service.create(room.id, { studentId: s1, visitAt: DAY25 });
     await expect(
-      service.create(room.id, { studentId: s1, visitAt: DAY26 }),
+      service.create(room.id, { studentId: s1, visitAt: DAY25_MORNING }),
     ).rejects.toMatchObject({ code: 'ALREADY_APPLIED' });
     await expectCountMatches(room.id);
   });
@@ -433,7 +499,7 @@ describe('VisitService', () => {
     expect((await rooms.findById(room.id))!.currentCount).toBe(0);
   });
 
-  it('취소 후 재신청하면 같은 신청 행이 다시 ACTIVE 가 되고 인원이 복구된다', async () => {
+  it('취소 후 재신청하면 새 신청 행이 생기고 인원이 복구된다 (취소된 옛 행은 그대로 남는다)', async () => {
     const [s1] = await seedStudents(1);
     const room = await makeRoom();
     const first = await service.create(room.id, {
@@ -447,9 +513,10 @@ describe('VisitService', () => {
       visitAt: DAY26,
     });
 
-    expect(again.id).toBe(first.id); // 새 행이 아니라 기존 행 재사용
+    expect(again.id).not.toBe(first.id); // 취소된 행을 되살리지 않고 새 행을 만든다
     expect(again).toMatchObject({ status: 'ACTIVE', visitAt: DAY26 });
-    expect(await visits.findAll()).toHaveLength(1);
+    expect(await visits.findAll()).toHaveLength(2);
+    expect((await visits.findById(first.id))!.status).toBe('CANCELLED');
     expect((await histories.findAll()).map((h) => h.action)).toEqual([
       'CREATE',
       'CANCEL',

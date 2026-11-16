@@ -91,7 +91,7 @@ COMMENT ON COLUMN study_room.version       IS '낙관적 락 버전. 정원 보�
 COMMENT ON COLUMN study_room.current_count IS '현재 신청 인원(취소 제외). 신청 +1, 취소 -1 을 같은 트랜잭션에서 갱신';
 
 -- ---------------------------------------------------------------------
--- 방문 신청 (현재 상태): 학생당 자습실당 1행. 취소 후 재신청은 이 행을 다시 ACTIVE 로 되살린다.
+-- 방문 신청 (현재 상태): 신청 한 건이 한 행. 취소해도 행은 남고(CANCELLED), 다시 신청하면 새 행이 생긴다.
 -- ---------------------------------------------------------------------
 CREATE TABLE visit_reservation (
   id              NUMBER GENERATED ALWAYS AS IDENTITY,
@@ -105,14 +105,16 @@ CREATE TABLE visit_reservation (
   CONSTRAINT pk_visit_reservation PRIMARY KEY (id),
   CONSTRAINT fk_visit_room    FOREIGN KEY (room_id)    REFERENCES study_room (id),
   CONSTRAINT fk_visit_student FOREIGN KEY (student_id) REFERENCES student (id),
-  CONSTRAINT ck_visit_status CHECK (status IN ('ACTIVE', 'CANCELLED')),
-  -- 학생당 자습실당 신청 행은 하나
-  CONSTRAINT uq_visit_room_student UNIQUE (room_id, student_id)
+  CONSTRAINT ck_visit_status CHECK (status IN ('ACTIVE', 'CANCELLED'))
 );
 
--- 한 학생은 모든 자습실을 통틀어 활성(ACTIVE) 신청을 한 건만 가질 수 있다.
-CREATE UNIQUE INDEX uq_visit_student_active
-  ON visit_reservation (CASE WHEN status = 'ACTIVE' THEN student_id END);
+-- 한 학생은 하루(한국 시간 기준)에 활성(ACTIVE) 신청을 한 건만 가질 수 있다 (자습실이 달라도 같다).
+-- visit_at 은 UTC 로 저장하므로 +9시간 해서 한국 날짜로 자른다. 취소된 신청은 두 열이 모두 NULL 이라 색인에서 빠진다.
+CREATE UNIQUE INDEX uq_visit_student_day
+  ON visit_reservation (
+    CASE WHEN status = 'ACTIVE' THEN student_id END,
+    CASE WHEN status = 'ACTIVE' THEN TRUNC(CAST(visit_at AS DATE) + 9 / 24) END
+  );
 
 CREATE INDEX ix_visit_room_status ON visit_reservation (room_id, status);
 CREATE INDEX ix_visit_student     ON visit_reservation (student_id);

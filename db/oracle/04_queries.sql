@@ -43,22 +43,18 @@ SELECT id, version, max_personnel, current_count, start_date, end_date, deleted_
 -- 2) 학생을 읽는다. 삭제됐거나 재원(ENROLLED)이 아니면 거부.
 SELECT id, version, status, deleted_at FROM student WHERE id = :student_id;
 
--- 3) 이 학생의 신청을 읽는다. ACTIVE 가 있으면 거부(같은 자습실이면 ALREADY_APPLIED, 다르면 OTHER_ROOM).
-SELECT id, room_id, status, version FROM visit_reservation WHERE student_id = :student_id;
+-- 3) 이 학생의 활성 신청을 읽는다. 방문 시각이 같은 날(한국 시간)인 것이 있으면 거부
+--    (같은 자습실이면 ALREADY_APPLIED, 다르면 OTHER_ROOM). 다른 날짜의 신청은 있어도 된다.
+--    날짜 비교는 앱이 하고, DB 는 uq_visit_student_day 인덱스로 최종 방어한다.
+SELECT id, room_id, visit_at FROM visit_reservation
+ WHERE student_id = :student_id AND status = 'ACTIVE';
 
 -- 4) 정원 검사: current_count >= max_personnel 이면 ROOM_FULL 로 거부.
 
--- 5-a) 신청 행 생성 (이 자습실에 이전 신청이 없을 때)
+-- 5) 신청 행 생성. 신청은 항상 새 행이다 (취소된 옛 행은 그대로 남는다)
 INSERT INTO visit_reservation (room_id, student_id, visit_at, status)
 VALUES (:room_id, :student_id, :visit_at, 'ACTIVE')
 RETURNING id INTO :reservation_id;
-
--- 5-b) 취소했던 신청이 있으면 그 행을 되살린다 (version 검사)
-UPDATE visit_reservation
-   SET status = 'ACTIVE', visit_at = :visit_at, version = version + 1,
-       updated_at = SYS_EXTRACT_UTC(SYSTIMESTAMP)
- WHERE id = :reservation_id AND version = :reservation_version;
--- 영향 행 0 → 충돌
 
 -- 6) 이력 추가 (CREATE: 전 없음 / 후 있음)
 INSERT INTO visit_history (reservation_id, room_id, student_id, action, before_visit_at, after_visit_at)
@@ -76,7 +72,7 @@ UPDATE study_room
 UPDATE student
    SET version = version + 1
  WHERE id = :student_id AND version = :student_version;
--- 영향 행 0 → 충돌.   uq_visit_student_active 인덱스가 활성 신청 2건을 최종적으로 막는다.
+-- 영향 행 0 → 충돌.   uq_visit_student_day 인덱스가 같은 날(한국 시간) 활성 신청 2건을 최종적으로 막는다.
 
 -- COMMIT;
 
