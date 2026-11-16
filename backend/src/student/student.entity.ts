@@ -9,8 +9,10 @@ export interface Student {
   version: number;
   name: string;
   phone: string;
-  /** 학번(수강번호). 삭제되지 않은 학생끼리는 중복될 수 없다. 이전 데이터에는 없을 수 있다(null). */
+  /** 학번(수강번호). 삭제되지 않은 학생끼리는 중복될 수 없다. 학생의 로그인 아이디로도 쓴다. 이전 데이터에는 없을 수 있다(null). */
   studentNo: string | null;
+  /** 비밀번호 해시 (원문은 저장하지 않는다). 응답에 내려주지 않는다. 없으면 로그인할 수 없다. */
+  passwordHash: string | null;
   /** 학부모 연락처 (선택) */
   guardianPhone: string | null;
   /** 학년 (선택). 예) 고2 */
@@ -22,6 +24,15 @@ export interface Student {
   createdAt: string;
   updatedAt: string;
   deletedAt: string | null;
+}
+
+/** API 응답용 학생. 비밀번호 해시는 절대 내려보내지 않는다. */
+export type StudentView = Omit<Student, 'passwordHash'>;
+
+export function toStudentView(student: Student): StudentView {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const { passwordHash, ...view } = student;
+  return view;
 }
 
 export const STUDENT_COLLECTION = 'students';

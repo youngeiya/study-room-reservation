@@ -13,6 +13,22 @@ export const ErrorCode = {
     status: HttpStatus.BAD_REQUEST,
     message: '시작 일시는 종료 일시보다 빨라야 합니다.',
   },
+  INVALID_CREDENTIALS: {
+    status: HttpStatus.UNAUTHORIZED,
+    message: '아이디 또는 비밀번호가 올바르지 않습니다.',
+  },
+  UNAUTHORIZED: {
+    status: HttpStatus.UNAUTHORIZED,
+    message: '로그인이 필요합니다.',
+  },
+  FORBIDDEN: {
+    status: HttpStatus.FORBIDDEN,
+    message: '이 기능을 사용할 권한이 없습니다.',
+  },
+  WRONG_CURRENT_PASSWORD: {
+    status: HttpStatus.BAD_REQUEST,
+    message: '현재 비밀번호가 올바르지 않습니다.',
+  },
   ROOM_NOT_FOUND: {
     status: HttpStatus.NOT_FOUND,
     message: '자습실을 찾을 수 없습니다.',

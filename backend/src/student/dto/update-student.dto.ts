@@ -5,6 +5,7 @@ import {
   IsString,
   Matches,
   MaxLength,
+  MinLength,
 } from 'class-validator';
 import {
   PHONE_MESSAGE,
@@ -35,6 +36,13 @@ export class UpdateStudentDto {
   @IsString()
   @Matches(STUDENT_NO_PATTERN, { message: STUDENT_NO_MESSAGE })
   studentNo?: string;
+
+  // 비밀번호 재설정 (선택). 보내면 새 비밀번호로 바뀐다.
+  @IsOptional()
+  @IsString()
+  @MinLength(4, { message: '비밀번호는 4자 이상이어야 합니다.' })
+  @MaxLength(50)
+  password?: string;
 
   @IsOptional()
   @IsString()

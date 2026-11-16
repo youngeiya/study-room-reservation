@@ -1,4 +1,5 @@
 import { Inject, Injectable, OnModuleInit } from '@nestjs/common';
+import { hashPassword } from '../auth/password';
 import { BusinessException } from '../common/business.exception';
 import { Clock } from '../common/clock.service';
 import { Database } from '../storage/database';
@@ -11,6 +12,8 @@ import {
   STUDENT_COLLECTION,
   STUDENT_REPOSITORY,
   Student,
+  StudentView,
+  toStudentView,
 } from './student.entity';
 
 // 처음 실행할 때 넣어 둘 예시 학생들
@@ -83,8 +86,8 @@ export class StudentService implements OnModuleInit {
   }
 
   /**
-   * 로그인이 없는 MVP이므로, 학생이 한 명도 없으면 화면에서 고를 수 있게 예시 학생을 넣는다.
-   * 이미 있는 데이터 중 새 필드(재원 상태 등)가 없는 이전 행은 기본값으로 채운다.
+   * 학생이 한 명도 없으면 예시 학생을 넣는다. 예시 학생의 초기 비밀번호는 학번과 같다.
+   * 이미 있는 데이터는 새 필드(재원 상태, 비밀번호)가 없으면 기본값으로 채운다.
    * onModuleInit: 앱이 뜰 때 Nest 가 자동으로 한 번 호출해 주는 훅.
    */
   async onModuleInit() {
@@ -93,9 +96,16 @@ export class StudentService implements OnModuleInit {
     const now = this.clock.now().toISOString();
 
     if (all.length === 0) {
+      // 해시 계산은 느려서(일부러) 트랜잭션 밖에서 미리 한다. 재시도로 트랜잭션이 다시 실행돼도 다시 계산하지 않는다.
+      const seeds = await Promise.all(
+        SEED_STUDENTS.map(async (seed) => ({
+          ...seed,
+          passwordHash: await hashPassword(seed.studentNo),
+        })),
+      );
       // 쓰기는 반드시 트랜잭션 안에서. 5명을 한 덩어리로 저장한다 (중간에 실패하면 전부 취소).
       await this.db.transaction(async () => {
-        for (const seed of SEED_STUDENTS) {
+        for (const seed of seeds) {
           await this.students.create({
             ...seed,
             memo: null,
@@ -109,20 +119,31 @@ export class StudentService implements OnModuleInit {
       return;
     }
 
-    // 이전 버전에서 저장된 학생(상태 필드 없음)을 새 형식에 맞춘다. 학번은 알 수 없으므로 비워 둔다(null).
-    const legacy = all.filter(
-      (s) => (s as Partial<Student>).status === undefined,
+    // 이전 버전에서 저장된 학생을 새 형식에 맞춘다.
+    //  - 재원 상태 등이 없으면 기본값으로, 학번은 알 수 없으므로 비워 둔다(null).
+    //  - 비밀번호가 없는데 학번이 있으면 초기 비밀번호를 학번으로 정한다 (학번이 없으면 강사가 학번을 정해 줄 때까지 로그인 불가).
+    const targets = all.filter(
+      (s) =>
+        (s as Partial<Student>).status === undefined ||
+        (!s.passwordHash && !!s.studentNo),
     );
-    if (legacy.length > 0) {
+    if (targets.length > 0) {
+      const hashes = new Map<number, string>();
+      for (const s of targets) {
+        if (!s.passwordHash && s.studentNo) {
+          hashes.set(s.id, await hashPassword(s.studentNo));
+        }
+      }
       await this.db.transaction(async () => {
-        for (const s of legacy) {
+        for (const s of targets) {
           await this.students.update({
             ...s,
             studentNo: s.studentNo ?? null,
+            passwordHash: hashes.get(s.id) ?? s.passwordHash ?? null,
             guardianPhone: s.guardianPhone ?? null,
             grade: s.grade ?? null,
             memo: s.memo ?? null,
-            status: 'ENROLLED',
+            status: s.status ?? 'ENROLLED',
           });
         }
       });
@@ -130,21 +151,25 @@ export class StudentService implements OnModuleInit {
   }
 
   /** FR-STD-01 / FN-STD-01: 삭제된 학생은 제외한다. (조건: deletedAt 이 null 인 학생만) */
-  findAll(): Promise<Student[]> {
-    return this.students.findAll((s) => s.deletedAt === null);
+  async findAll(): Promise<StudentView[]> {
+    const list = await this.students.findAll((s) => s.deletedAt === null);
+    return list.map(toStudentView); // 비밀번호 해시는 내려보내지 않는다
   }
 
   /** FR-STD-02 / FN-STD-02: 학생 등록. 새 학생은 항상 재원(ENROLLED) 상태로 시작한다. */
-  create(dto: CreateStudentDto): Promise<Student> {
+  async create(dto: CreateStudentDto): Promise<StudentView> {
     const now = this.clock.now().toISOString();
-    return this.guardUnique(() =>
+    const studentNo = dto.studentNo.trim();
+    // 초기 비밀번호: 강사가 정하지 않으면 학번과 같다
+    const passwordHash = await hashPassword(dto.password ?? studentNo);
+    const created = await this.guardUnique(() =>
       this.db.transaction(async () => {
-        const studentNo = dto.studentNo.trim();
         await this.assertStudentNoFree(studentNo);
         return this.students.create({
           name: dto.name.trim(),
           phone: dto.phone,
           studentNo,
+          passwordHash,
           guardianPhone: normalizeOptional(dto.guardianPhone) ?? null,
           grade: normalizeOptional(dto.grade) ?? null,
           memo: normalizeOptional(dto.memo) ?? null,
@@ -155,14 +180,18 @@ export class StudentService implements OnModuleInit {
         });
       }),
     );
+    return toStudentView(created);
   }
 
   /**
    * FR-STD-02: 학생 수정. 보낸 필드만 바꾸고, 삭제된 학생은 수정할 수 없다.
    * 재원 → 휴원·퇴원으로 바꾸려면 활성 신청이 없어야 한다 (삭제와 같은 원칙).
    */
-  update(id: number, dto: UpdateStudentDto): Promise<Student> {
-    return this.guardUnique(() =>
+  async update(id: number, dto: UpdateStudentDto): Promise<StudentView> {
+    // 비밀번호를 바꾸는 경우에만 해시를 만든다 (느린 계산이라 트랜잭션 밖에서)
+    const passwordHash =
+      dto.password !== undefined ? await hashPassword(dto.password) : undefined;
+    const updated = await this.guardUnique(() =>
       this.db.transaction(async () => {
         const student = await this.getActiveOrThrow(id);
 
@@ -183,6 +212,7 @@ export class StudentService implements OnModuleInit {
           name: dto.name?.trim() ?? student.name,
           phone: dto.phone ?? student.phone,
           studentNo: studentNo ?? student.studentNo,
+          passwordHash: passwordHash ?? student.passwordHash,
           guardianPhone:
             guardianPhone === undefined ? student.guardianPhone : guardianPhone,
           grade: grade === undefined ? student.grade : grade,
@@ -192,6 +222,7 @@ export class StudentService implements OnModuleInit {
         });
       }),
     );
+    return toStudentView(updated);
   }
 
   /**

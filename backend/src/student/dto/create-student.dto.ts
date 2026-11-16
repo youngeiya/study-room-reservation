@@ -4,6 +4,7 @@ import {
   IsString,
   Matches,
   MaxLength,
+  MinLength,
 } from 'class-validator';
 
 // 전화번호 형식: 숫자와 하이픈만, 예) 010-1234-5678 / 01012345678
@@ -28,6 +29,13 @@ export class CreateStudentDto {
   @IsString()
   @Matches(STUDENT_NO_PATTERN, { message: STUDENT_NO_MESSAGE })
   studentNo!: string;
+
+  // 초기 비밀번호 (선택). 보내지 않으면 학번과 같게 정한다.
+  @IsOptional()
+  @IsString()
+  @MinLength(4, { message: '비밀번호는 4자 이상이어야 합니다.' })
+  @MaxLength(50)
+  password?: string;
 
   // 선택 값: 보내지 않거나 null 이면 "없음"
   @IsOptional()

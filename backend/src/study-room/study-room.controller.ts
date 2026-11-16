@@ -8,6 +8,7 @@ import {
   Patch,
   Post,
 } from '@nestjs/common';
+import { Roles } from '../auth/auth.decorators';
 import { CreateStudyRoomDto } from './dto/create-study-room.dto';
 import { UpdateStudyRoomDto } from './dto/update-study-room.dto';
 import { StudyRoom } from './study-room.entity';
@@ -35,13 +36,15 @@ export class StudyRoomController {
     return this.studyRoomService.findOne(id);
   }
 
-  // POST /api/study-rooms : 등록. @Body 는 요청 JSON → DTO. 형식 검사는 ValidationPipe 가 먼저 한다.
+  // POST /api/study-rooms : 등록 (강사). @Body 는 요청 JSON → DTO. 형식 검사는 ValidationPipe 가 먼저 한다.
+  @Roles('INSTRUCTOR')
   @Post()
   create(@Body() dto: CreateStudyRoomDto): Promise<StudyRoom> {
     return this.studyRoomService.create(dto);
   }
 
   // PATCH /api/study-rooms/1 : 일부 필드 수정
+  @Roles('INSTRUCTOR')
   @Patch(':id')
   update(
     @Param('id', ParseIntPipe) id: number,
@@ -51,6 +54,7 @@ export class StudyRoomController {
   }
 
   // DELETE /api/study-rooms/1 : 삭제 (실제로는 deletedAt 만 채우는 Soft Delete)
+  @Roles('INSTRUCTOR')
   @Delete(':id')
   remove(@Param('id', ParseIntPipe) id: number): Promise<void> {
     return this.studyRoomService.remove(id);

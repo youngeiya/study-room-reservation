@@ -59,6 +59,7 @@ describe('VisitService', () => {
           name: `학생${i}`,
           phone: `010-0000-000${i}`,
           studentNo: `T00${i}`,
+          passwordHash: null,
           guardianPhone: null,
           grade: null,
           memo: null,

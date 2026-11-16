@@ -1,7 +1,9 @@
 import { Module } from '@nestjs/common';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
+import { AuthModule } from './auth/auth.module';
 import { CommonModule } from './common/common.module';
+import { InstructorModule } from './instructor/instructor.module';
 import { StorageModule } from './storage/storage.module';
 import { StudentModule } from './student/student.module';
 import { StudyRoomModule } from './study-room/study-room.module';
@@ -15,9 +17,11 @@ import { VisitModule } from './visit/visit.module';
   imports: [
     CommonModule, // 응답 포맷, 예외 필터, Clock
     StorageModule, // JSON 파일 DB
+    InstructorModule, // 강사 계정
     StudentModule, // 학생
     StudyRoomModule, // 자습실
     VisitModule, // 방문 신청·이력
+    AuthModule, // 로그인·권한 (전역 가드)
   ],
   controllers: [AppController],
   providers: [AppService],
