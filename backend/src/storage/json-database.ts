@@ -3,9 +3,12 @@ import { AsyncLocalStorage } from 'node:async_hooks';
 import { existsSync } from 'node:fs';
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
+import { Database, TransactionOptions } from './database';
+import { JsonRepository } from './json-repository';
 import { Mutex } from './mutex';
 import { OptimisticLockError } from './optimistic-lock.error';
-import { BaseEntity } from './repository';
+import { BaseEntity, Repository } from './repository';
+import { UniqueViolationError } from './unique-violation.error';
 
 // db.json 파일의 모양.
 // collections: 테이블 역할. 예) { studyRooms: [...], students: [...] }
@@ -23,6 +26,14 @@ type PendingWrite =
 
 interface TxContext {
   writes: PendingWrite[];
+}
+
+// 유니크 제약 한 건. appliesTo 가 true 인 행들 사이에서만 field 값이 겹치면 안 된다.
+// (예: 삭제되지 않은 학생끼리만 학번이 겹치면 안 됨 = DB 의 부분 유니크 인덱스)
+interface UniqueRule {
+  collection: string;
+  field: string;
+  appliesTo: (row: BaseEntity) => boolean;
 }
 
 // 충돌 시 재시도 횟수의 기본값 (첫 시도 + 재시도 5회)
@@ -43,16 +54,20 @@ const DEFAULT_RETRIES = 5;
  * 서버가 여러 대일 때는 Repository 구현체를 실제 DB로 교체한다 (version 검사는 SQL 의 WHERE version = ? 로 동일하게 동작).
  */
 @Injectable()
-export class JsonDatabase {
+export class JsonDatabase extends Database {
   // 커밋된 전체 데이터. 읽기는 여기서 바로 한다.
   private data: DbData = { collections: {}, sequences: {} };
   // 파일 저장(persist)만 한 번에 하나씩 하도록 줄 세운다. 업무 로직은 잠그지 않는다.
   private readonly writeMutex = new Mutex();
   // "지금 실행 중인 코드가 어느 트랜잭션 안인가"를 비동기 흐름 따라 기억한다 (자바의 ThreadLocal 과 비슷).
   private readonly txContext = new AsyncLocalStorage<TxContext>();
+  // 등록된 유니크 제약들. 커밋할 때 검사한다.
+  private readonly uniqueRules: UniqueRule[] = [];
 
   // filePath 는 생성자 주입 대상이 아니라서 StorageModule 의 팩토리에서 직접 new 로 만든다.
-  constructor(private readonly filePath: string) {}
+  constructor(private readonly filePath: string) {
+    super();
+  }
 
   /** 파일을 읽어 메모리에 올린다. 모듈 훅 순서에 기대지 않도록 StorageModule 팩토리에서 await 한다. */
   async init() {
@@ -70,7 +85,7 @@ export class JsonDatabase {
    */
   async transaction<T>(
     work: () => Promise<T>,
-    options: { retries?: number } = {},
+    options: TransactionOptions = {},
   ): Promise<T> {
     const maxRetries = options.retries ?? DEFAULT_RETRIES;
     for (let attempt = 0; ; attempt++) {
@@ -96,6 +111,31 @@ export class JsonDatabase {
     }
   }
 
+  /** 컬렉션 하나를 다루는 JSON 저장소를 만든다. */
+  repository<T extends BaseEntity>(collection: string): Repository<T> {
+    return new JsonRepository<T>(this, collection);
+  }
+
+  /**
+   * 유니크 제약을 등록한다 (같은 제약을 여러 번 등록해도 한 번만 적용된다).
+   * 서비스에서 "이미 있는지" 먼저 확인해도, 두 요청이 동시에 같은 값을 넣는 경우는 서비스 검사만으로 막을 수 없다
+   * (서로 다른 새 행이라 version 충돌도 나지 않기 때문). 그래서 커밋 때 한 번 더 검사해 최종 방어선으로 쓴다.
+   */
+  registerUnique(
+    collection: string,
+    field: string,
+    appliesTo: (row: BaseEntity) => boolean = () => true,
+  ) {
+    if (
+      this.uniqueRules.some(
+        (r) => r.collection === collection && r.field === field,
+      )
+    ) {
+      return;
+    }
+    this.uniqueRules.push({ collection, field, appliesTo });
+  }
+
   /**
    * 모아 둔 쓰기를 한 번에 검사·적용한다. await 가 없는 동기 함수이므로
    * 검사하고 적용하는 사이에 다른 요청이 끼어들 수 없다 (Node 는 싱글 스레드).
@@ -117,7 +157,30 @@ export class JsonDatabase {
       }
       list[index] = { ...structuredClone(w.row), version: w.row.version + 1 };
     }
+    this.assertUnique(draft, writes);
     this.data = draft;
+  }
+
+  // 적용 결과(draft)에서, 이번에 쓴 행과 같은 값을 가진 다른 행이 있으면 유니크 위반이다.
+  // 값이 null/undefined 인 행은 "값 없음"이라 서로 겹쳐도 된다 (DB 의 UNIQUE 가 NULL 을 허용하는 것과 같다).
+  private assertUnique(draft: DbData, writes: PendingWrite[]) {
+    for (const rule of this.uniqueRules) {
+      const list = draft.collections[rule.collection] ?? [];
+      for (const w of writes) {
+        if (w.collection !== rule.collection || !rule.appliesTo(w.row))
+          continue;
+        const value = (w.row as unknown as Record<string, unknown>)[rule.field];
+        if (value === null || value === undefined) continue;
+        const clash = list.some(
+          (r) =>
+            r.id !== w.row.id &&
+            rule.appliesTo(r) &&
+            (r as unknown as Record<string, unknown>)[rule.field] === value,
+        );
+        if (clash)
+          throw new UniqueViolationError(rule.collection, rule.field, value);
+      }
+    }
   }
 
   /** 커밋된 컬렉션(테이블)을 읽는다. 처음 쓰는 이름이면 빈 배열 (??= : 없을 때만 대입). */

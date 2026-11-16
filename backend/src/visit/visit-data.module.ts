@@ -1,6 +1,5 @@
 import { Module } from '@nestjs/common';
-import { JsonDatabase } from '../storage/json-database';
-import { JsonRepository } from '../storage/json-repository';
+import { Database } from '../storage/database';
 import {
   VISIT_COLLECTION,
   VISIT_HISTORY_COLLECTION,
@@ -19,15 +18,15 @@ import {
   providers: [
     {
       provide: VISIT_REPOSITORY,
-      useFactory: (db: JsonDatabase) =>
-        new JsonRepository<VisitReservation>(db, VISIT_COLLECTION),
-      inject: [JsonDatabase],
+      useFactory: (db: Database) =>
+        db.repository<VisitReservation>(VISIT_COLLECTION),
+      inject: [Database],
     },
     {
       provide: VISIT_HISTORY_REPOSITORY,
-      useFactory: (db: JsonDatabase) =>
-        new JsonRepository<VisitHistory>(db, VISIT_HISTORY_COLLECTION),
-      inject: [JsonDatabase],
+      useFactory: (db: Database) =>
+        db.repository<VisitHistory>(VISIT_HISTORY_COLLECTION),
+      inject: [Database],
     },
   ],
   exports: [VISIT_REPOSITORY, VISIT_HISTORY_REPOSITORY],

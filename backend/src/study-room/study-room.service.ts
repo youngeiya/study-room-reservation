@@ -1,12 +1,23 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, OnModuleInit } from '@nestjs/common';
 import { BusinessException } from '../common/business.exception';
 import { Clock } from '../common/clock.service';
-import { JsonDatabase } from '../storage/json-database';
+import { Database } from '../storage/database';
 import type { Repository } from '../storage/repository';
 import { VISIT_REPOSITORY, VisitReservation } from '../visit/visit.entity';
 import { CreateStudyRoomDto } from './dto/create-study-room.dto';
 import { UpdateStudyRoomDto } from './dto/update-study-room.dto';
 import { STUDY_ROOM_REPOSITORY, StudyRoom } from './study-room.entity';
+
+// 처음 실행할 때 넣어 둘 예시 자습실 (정원 10명, 10명, 5명).
+const SEED_ROOMS = [
+  { name: '부엉이 라이브러리 1관', maxPersonnel: 10 },
+  { name: '부엉이 라이브러리 2관', maxPersonnel: 10 },
+  { name: '부엉이 라이브러리 3관 (소수 정예)', maxPersonnel: 5 },
+];
+// 예시 자습실의 운영 기간: 어제부터 30일 뒤까지 (언제 실행해도 바로 신청해 볼 수 있게 현재 시각 기준)
+const SEED_PERIOD_BEFORE_DAYS = 1;
+const SEED_PERIOD_AFTER_DAYS = 30;
+const DAY_MS = 24 * 60 * 60 * 1000;
 
 /**
  * 자습실의 업무 규칙이 모여 있는 곳.
@@ -14,16 +25,46 @@ import { STUDY_ROOM_REPOSITORY, StudyRoom } from './study-room.entity';
  * 현재 신청 인원(currentCount)은 방문 신청 서비스(VisitService)만 바꾼다. 여기서는 읽기만 한다.
  */
 @Injectable()
-export class StudyRoomService {
+export class StudyRoomService implements OnModuleInit {
   constructor(
     @Inject(STUDY_ROOM_REPOSITORY)
     private readonly rooms: Repository<StudyRoom>,
     // 운영 기간을 바꿀 때 "기간 밖으로 밀려나는 신청이 있는지" 확인하려고 신청 저장소를 읽는다
     @Inject(VISIT_REPOSITORY)
     private readonly visits: Repository<VisitReservation>,
-    private readonly db: JsonDatabase,
+    private readonly db: Database,
     private readonly clock: Clock,
   ) {}
+
+  /**
+   * 처음 실행했을 때 화면이 비어 보이지 않도록 예시 자습실을 넣는다.
+   * 삭제된 자습실(Soft Delete 라 행이 남아 있음)까지 포함해 "한 건도 없을 때만" 넣으므로,
+   * 사용자가 자습실을 모두 지워도 재시작할 때 다시 생기지 않는다.
+   */
+  async onModuleInit() {
+    if ((await this.rooms.findAll()).length > 0) return;
+    const nowDate = this.clock.now();
+    const now = nowDate.toISOString();
+    const startDate = new Date(
+      nowDate.getTime() - SEED_PERIOD_BEFORE_DAYS * DAY_MS,
+    ).toISOString();
+    const endDate = new Date(
+      nowDate.getTime() + SEED_PERIOD_AFTER_DAYS * DAY_MS,
+    ).toISOString();
+    await this.db.transaction(async () => {
+      for (const seed of SEED_ROOMS) {
+        await this.rooms.create({
+          ...seed,
+          currentCount: 0,
+          startDate,
+          endDate,
+          createdAt: now,
+          updatedAt: now,
+          deletedAt: null,
+        });
+      }
+    });
+  }
 
   /** FR-ROM-01 / FN-ROM-01: 삭제되지 않은 자습실 (currentCount 가 현재 신청 인원) */
   findAll(): Promise<StudyRoom[]> {

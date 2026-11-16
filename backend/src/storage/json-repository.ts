@@ -1,4 +1,4 @@
-import { JsonDatabase } from './json-database';
+import type { JsonDatabase } from './json-database';
 import { BaseEntity, Repository } from './repository';
 
 /**

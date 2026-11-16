@@ -58,6 +58,11 @@ describe('VisitService', () => {
         const s = await students.create({
           name: `학생${i}`,
           phone: `010-0000-000${i}`,
+          studentNo: `T00${i}`,
+          guardianPhone: null,
+          grade: null,
+          memo: null,
+          status: 'ENROLLED',
           createdAt: now.toISOString(),
           updatedAt: now.toISOString(),
           deletedAt: null,
@@ -83,6 +88,81 @@ describe('VisitService', () => {
     );
     expect(room.currentCount).toBe(active.length);
   };
+
+  // ── 한 학생은 모든 자습실을 통틀어 활성 신청 1건 ───────────────
+  describe('다른 자습실에 이미 신청한 학생', () => {
+    it('다른 자습실에는 시간이 달라도 신청할 수 없고, 인원·이력은 바뀌지 않는다', async () => {
+      const [s1] = await seedStudents(1);
+      const room1 = await makeRoom();
+      const room2 = await makeRoom();
+      await service.create(room1.id, { studentId: s1, visitAt: DAY25 });
+
+      await expect(
+        service.create(room2.id, { studentId: s1, visitAt: DAY26 }),
+      ).rejects.toMatchObject({
+        code: 'ALREADY_APPLIED_OTHER_ROOM',
+        data: { roomId: room1.id },
+      });
+
+      expect((await rooms.findById(room2.id))!.currentCount).toBe(0);
+      expect(await histories.findAll()).toHaveLength(1);
+      await expectCountMatches(room2.id);
+    });
+
+    it('같은 자습실에 다시 신청하면 기존처럼 ALREADY_APPLIED 이다', async () => {
+      const [s1] = await seedStudents(1);
+      const room1 = await makeRoom();
+      await service.create(room1.id, { studentId: s1, visitAt: DAY25 });
+
+      await expect(
+        service.create(room1.id, { studentId: s1, visitAt: DAY26 }),
+      ).rejects.toMatchObject({ code: 'ALREADY_APPLIED' });
+    });
+
+    it('다른 학생은 다른 자습실에 신청할 수 있다', async () => {
+      const [s1, s2] = await seedStudents(2);
+      const room1 = await makeRoom();
+      const room2 = await makeRoom();
+      await service.create(room1.id, { studentId: s1, visitAt: DAY25 });
+
+      await expect(
+        service.create(room2.id, { studentId: s2, visitAt: DAY25 }),
+      ).resolves.toMatchObject({ status: 'ACTIVE' });
+    });
+
+    it('앞의 신청을 취소하면 다른 자습실에 신청할 수 있다', async () => {
+      const [s1] = await seedStudents(1);
+      const room1 = await makeRoom();
+      const room2 = await makeRoom();
+      const first = await service.create(room1.id, {
+        studentId: s1,
+        visitAt: DAY25,
+      });
+      await service.cancel(first.id, { studentId: s1 });
+
+      await expect(
+        service.create(room2.id, { studentId: s1, visitAt: DAY25 }),
+      ).resolves.toMatchObject({ status: 'ACTIVE' });
+    });
+
+    it('동시에 서로 다른 자습실에 신청하면 한 건만 성공한다', async () => {
+      const [s1] = await seedStudents(1);
+      const room1 = await makeRoom();
+      const room2 = await makeRoom();
+
+      const results = await Promise.allSettled([
+        service.create(room1.id, { studentId: s1, visitAt: DAY25 }),
+        service.create(room2.id, { studentId: s1, visitAt: DAY26 }),
+      ]);
+
+      expect(results.filter((r) => r.status === 'fulfilled')).toHaveLength(1);
+      expect(await visits.findAll((v) => v.status === 'ACTIVE')).toHaveLength(
+        1,
+      );
+      await expectCountMatches(room1.id);
+      await expectCountMatches(room2.id);
+    });
+  });
 
   // ── 신청 ────────────────────────────────────────────────────
   it('신청하면 ACTIVE 신청과 CREATE 이력이 생기고 인원이 1 늘어난다', async () => {

@@ -21,6 +21,19 @@ export const ErrorCode = {
     status: HttpStatus.NOT_FOUND,
     message: '학생을 찾을 수 없습니다.',
   },
+  STUDENT_HAS_ACTIVE_VISITS: {
+    status: HttpStatus.CONFLICT,
+    message:
+      '방문 신청이 남아 있는 학생은 삭제하거나 휴원·퇴원 처리할 수 없습니다. 신청을 먼저 취소해 주세요.',
+  },
+  STUDENT_NO_DUPLICATED: {
+    status: HttpStatus.CONFLICT,
+    message: '이미 사용 중인 학번입니다.',
+  },
+  STUDENT_NOT_ENROLLED: {
+    status: HttpStatus.CONFLICT,
+    message: '재원 중인 학생만 방문을 신청할 수 있습니다.',
+  },
   VISIT_NOT_FOUND: {
     status: HttpStatus.NOT_FOUND,
     message: '방문 신청을 찾을 수 없습니다.',
@@ -36,6 +49,11 @@ export const ErrorCode = {
   ALREADY_APPLIED: {
     status: HttpStatus.CONFLICT,
     message: '이미 신청한 자습실입니다.',
+  },
+  ALREADY_APPLIED_OTHER_ROOM: {
+    status: HttpStatus.CONFLICT,
+    message:
+      '다른 자습실에 이미 방문을 신청했습니다. 기존 신청을 취소한 뒤 신청해 주세요.',
   },
   OUT_OF_PERIOD: {
     status: HttpStatus.BAD_REQUEST,

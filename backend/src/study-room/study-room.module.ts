@@ -1,6 +1,5 @@
 import { Module } from '@nestjs/common';
-import { JsonDatabase } from '../storage/json-database';
-import { JsonRepository } from '../storage/json-repository';
+import { Database } from '../storage/database';
 import { VisitDataModule } from '../visit/visit-data.module';
 import {
   STUDY_ROOM_COLLECTION,
@@ -19,9 +18,9 @@ import { StudyRoomService } from './study-room.service';
     StudyRoomService,
     {
       provide: STUDY_ROOM_REPOSITORY,
-      useFactory: (db: JsonDatabase) =>
-        new JsonRepository<StudyRoom>(db, STUDY_ROOM_COLLECTION),
-      inject: [JsonDatabase],
+      useFactory: (db: Database) =>
+        db.repository<StudyRoom>(STUDY_ROOM_COLLECTION),
+      inject: [Database],
     },
   ],
   // 방문 신청 모듈이 "자습실이 있는지, 삭제되었는지, 운영 기간이 맞는지" 확인할 때 사용한다.

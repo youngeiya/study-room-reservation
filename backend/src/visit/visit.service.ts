@@ -1,7 +1,7 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { BusinessException } from '../common/business.exception';
 import { Clock } from '../common/clock.service';
-import { JsonDatabase } from '../storage/json-database';
+import { Database } from '../storage/database';
 import type { Repository } from '../storage/repository';
 import { STUDENT_REPOSITORY, Student } from '../student/student.entity';
 import {
@@ -45,7 +45,7 @@ export class VisitService {
     private readonly rooms: Repository<StudyRoom>,
     @Inject(STUDENT_REPOSITORY)
     private readonly students: Repository<Student>,
-    private readonly db: JsonDatabase,
+    private readonly db: Database,
     private readonly clock: Clock,
   ) {}
 
@@ -55,19 +55,30 @@ export class VisitService {
     // 재시도 때 처음부터 다시 실행되므로, 필요한 값은 모두 이 안에서 새로 읽는다.
     return this.db.transaction(async () => {
       const room = await this.getActiveRoomOrThrow(roomId); // 없음/삭제됨 거부
-      await this.assertStudentExists(dto.studentId); // 없는/삭제된 학생 거부
+      const student = await this.getActiveStudentOrThrow(dto.studentId); // 없는/삭제된 학생 거부
+      if (student.status !== 'ENROLLED') {
+        throw new BusinessException('STUDENT_NOT_ENROLLED'); // 휴원·퇴원 학생은 신청 불가
+      }
       this.assertWithinPeriod(room, visitAt); // 운영 기간 안인지
 
-      // 같은 학생의 이 자습실 신청 (취소된 것 포함). 학생당 한 자습실에 신청 행은 하나만 둔다.
-      const [existing] = await this.visits.findAll(
-        (v) => v.roomId === roomId && v.studentId === dto.studentId,
+      // 이 학생의 신청 전체 (취소된 것 포함). 한 학생은 "모든 자습실을 통틀어" 활성 신청을 한 건만 가질 수 있다.
+      const mine = await this.visits.findAll(
+        (v) => v.studentId === dto.studentId,
       );
-      if (existing?.status === 'ACTIVE') {
-        throw new BusinessException('ALREADY_APPLIED'); // 중복 신청
+      const active = mine.find((v) => v.status === 'ACTIVE');
+      if (active) {
+        // 같은 자습실이면 중복 신청, 다른 자습실이면 어느 자습실인지 알려 준다
+        throw active.roomId === roomId
+          ? new BusinessException('ALREADY_APPLIED')
+          : new BusinessException('ALREADY_APPLIED_OTHER_ROOM', {
+              roomId: active.roomId,
+            });
       }
       if (room.currentCount >= room.maxPersonnel) {
         throw new BusinessException('ROOM_FULL'); // 정원 초과
       }
+      // 이 자습실에 취소했던 신청이 있으면 그 행을 되살린다 (학생당 자습실당 신청 행은 하나만 둔다)
+      const existing = mine.find((v) => v.roomId === roomId);
 
       const now = this.clock.now().toISOString();
       // 취소했던 신청이 있으면 그 행을 다시 ACTIVE 로 되살리고, 없으면 새로 만든다.
@@ -89,6 +100,10 @@ export class VisitService {
 
       await this.recordHistory(reservation, 'CREATE', null, visitAt, now);
       await this.changeCount(room, +1, now);
+      // 같은 학생이 서로 다른 자습실에 동시에 신청하는 경우를 잡으려고 학생 행도 "건드려서" version 을 올린다.
+      // (자습실 행은 방마다 달라서, 방이 다르면 자습실 version 검사만으로는 충돌이 감지되지 않는다.
+      //  학생 행이 "이 학생의 활성 신청은 한 건" 규칙의 문지기 역할을 한다)
+      await this.students.update(student);
       return reservation;
     });
   }
@@ -222,10 +237,15 @@ export class VisitService {
   }
 
   private async assertStudentExists(studentId: number) {
+    await this.getActiveStudentOrThrow(studentId);
+  }
+
+  private async getActiveStudentOrThrow(studentId: number): Promise<Student> {
     const student = await this.students.findById(studentId);
     if (!student || student.deletedAt !== null) {
       throw new BusinessException('STUDENT_NOT_FOUND');
     }
+    return student;
   }
 
   // 방문 시간은 운영 기간 안이어야 한다 (시작·종료 시각 자체는 포함)

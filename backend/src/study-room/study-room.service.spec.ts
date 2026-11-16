@@ -57,6 +57,26 @@ describe('StudyRoomService', () => {
       return visit;
     });
 
+  it('처음 실행하면 예시 자습실이 들어가고, 재시작해도 중복되지 않는다', async () => {
+    await service.onModuleInit();
+    const seeded = await service.findAll();
+    expect(seeded.map((r) => r.maxPersonnel)).toEqual([10, 10, 5]);
+    expect(seeded.every((r) => r.currentCount === 0)).toBe(true);
+    // 운영 기간은 (고정된) 현재 시각을 포함한다
+    expect(seeded[0].startDate < NOW && NOW < seeded[0].endDate).toBe(true);
+
+    await service.onModuleInit();
+    expect(await service.findAll()).toHaveLength(3);
+  });
+
+  it('자습실을 모두 삭제해도(Soft Delete) 재시작할 때 예시가 다시 생기지 않는다', async () => {
+    await service.onModuleInit();
+    for (const room of await service.findAll()) await service.remove(room.id);
+
+    await service.onModuleInit();
+    expect(await service.findAll()).toHaveLength(0);
+  });
+
   it('시작이 종료보다 늦거나 같으면 등록할 수 없다', async () => {
     await expect(
       service.create({ ...base, startDate: base.endDate }),
