@@ -1,5 +1,9 @@
 ﻿# Local JSON database (created when the backend runs)
 /backend/data/
 
+# Environment files (DB passwords etc.)
+.env
+!.env.example
+
 # IDE settings (personal)
 .idea/
