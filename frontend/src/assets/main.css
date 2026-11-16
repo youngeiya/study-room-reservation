@@ -1,9 +1,80 @@
-/* 화면 스타일은 Vuetify(Material Design)가 담당한다. 여기에는 전역으로 꼭 필요한 것만 둔다. */
-body {
+/*
+ * 시대인재 홈페이지의 느낌(흰 배경, 검정 글씨, 가는 선, 절제된 색, 큰 제목)에 맞춘 전역 스타일.
+ * 부품 모양은 Vuetify 가 담당하고, 여기에는 테마만으로 바꿀 수 없는 것만 둔다.
+ */
+:root {
+  --line: #e4e4e4; /* 가는 구분선 */
+  --muted: #8a8a8a; /* 보조 글씨 */
+}
+
+/* 글꼴: Pretendard(index.html 에서 불러옴). 불러오지 못하면 시스템 글꼴로 대신한다 */
+body,
+.v-application {
   font-family:
-    system-ui,
+    'Pretendard Variable',
+    Pretendard,
     -apple-system,
     'Segoe UI',
     'Malgun Gothic',
-    sans-serif;
+    sans-serif !important;
+  letter-spacing: -0.01em;
+  color: #111;
+}
+
+/* 버튼: 대문자·굵은 글씨 없이 담백하게 */
+.v-btn {
+  text-transform: none;
+  letter-spacing: -0.01em;
+  font-weight: 500;
+}
+
+/* 카드: 그림자 대신 가는 선 */
+.v-card {
+  box-shadow: none !important;
+  border: 1px solid var(--line);
+}
+
+/* 페이지 제목: 크고 가볍게 */
+.v-main h1.text-h5 {
+  font-size: 2rem !important;
+  font-weight: 500 !important;
+  letter-spacing: -0.03em !important;
+  line-height: 1.3 !important;
+}
+
+/* 상단바 */
+.site-header {
+  border-bottom: 1px solid var(--line) !important;
+}
+.site-header .nav-link {
+  color: var(--muted);
+  font-size: 1rem;
+  font-weight: 500;
+  padding: 0 14px;
+}
+.site-header .nav-link.v-btn--active {
+  color: #111;
+  font-weight: 700;
+}
+/* 활성 메뉴에 Vuetify 기본 배경 효과를 쓰지 않는다 (글씨 굵기와 색으로만 구분) */
+.site-header .nav-link .v-btn__overlay {
+  display: none;
+}
+.site-header .sub-title {
+  color: #b5b5b5;
+  font-size: 1.05rem;
+  letter-spacing: 0.04em;
+}
+.site-divider {
+  width: 1px;
+  height: 14px;
+  background: #d6d6d6;
+}
+
+/* 표: 머리글은 연한 회색 글씨 */
+.v-table {
+  --v-table-header-color: #6b6b6b;
+}
+.v-table thead th {
+  font-weight: 600 !important;
 }

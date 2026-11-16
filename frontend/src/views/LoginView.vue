@@ -2,8 +2,9 @@
 import { computed, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import type { SubmitEventPromise } from 'vuetify'
-import { mdiEye, mdiEyeOff, mdiOwl } from '@mdi/js'
+import { mdiEye, mdiEyeOff } from '@mdi/js'
 import type { Role } from '@/api/types'
+import BrandLogo from '@/components/BrandLogo.vue'
 import { useAction } from '@/composables/useAction'
 import { homeOf } from '@/router/home'
 import { useSessionStore } from '@/stores/session'
@@ -34,11 +35,12 @@ async function submit(event: SubmitEventPromise) {
 
 <template>
   <v-main class="d-flex align-center justify-center" style="min-height: 100vh">
-    <v-card width="100%" max-width="420" class="pa-4 mx-4" elevation="3">
-      <div class="text-center mb-4">
-        <v-icon :icon="mdiOwl" size="48" color="primary" />
-        <h1 class="text-h5 font-weight-bold mt-2">부엉이 라이브러리</h1>
-        <div class="text-body-2 text-medium-emphasis">자습실 예약</div>
+    <!-- 시대인재 홈페이지처럼 상자 없이 흰 바탕에 왼쪽 정렬 -->
+    <div style="width: 100%; max-width: 400px" class="mx-4">
+      <div class="mb-8">
+        <BrandLogo :width="130" class="mb-6" />
+        <h1 class="text-h5">부엉이 라이브러리</h1>
+        <div class="text-body-1 mt-1" style="color: #8a8a8a">Study Room Reservation</div>
       </div>
 
       <v-form @submit.prevent="submit">
@@ -75,6 +77,6 @@ async function submit(event: SubmitEventPromise) {
           {{ role === 'INSTRUCTOR' ? '강사 로그인' : '학생 로그인' }}
         </v-btn>
       </v-form>
-    </v-card>
+    </div>
   </v-main>
 </template>
