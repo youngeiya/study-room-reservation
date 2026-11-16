@@ -18,11 +18,20 @@ export interface StudyRoom {
   deletedAt: string | null
 }
 
+/** 재원 상태: 재원 / 휴원 / 퇴원. 재원인 학생만 신청할 수 있다. */
+export type StudentStatus = 'ENROLLED' | 'ON_LEAVE' | 'WITHDRAWN'
+
 export interface Student {
   id: number
   version: number
   name: string
   phone: string
+  /** 학번 (이전 데이터에는 없을 수 있음) */
+  studentNo: string | null
+  guardianPhone: string | null
+  grade: string | null
+  memo: string | null
+  status: StudentStatus
   createdAt: string
   updatedAt: string
   deletedAt: string | null
@@ -55,6 +64,19 @@ export interface VisitHistory {
   createdAt: string
   /** 학생 이름 (삭제된 학생이면 null일 수 있음) */
   studentName: string | null
+}
+
+/** 학생 등록·수정 요청 */
+export interface StudentPayload {
+  name: string
+  phone: string
+  studentNo: string
+  /** 선택 값은 비우면 null 을 보낸다 (서버가 값을 비운다) */
+  guardianPhone: string | null
+  grade: string | null
+  memo: string | null
+  /** 수정할 때만 보낸다 (등록은 항상 재원) */
+  status?: StudentStatus
 }
 
 /** 자습실 등록·수정 요청 */

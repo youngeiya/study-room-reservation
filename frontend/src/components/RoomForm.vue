@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref } from 'vue'
+import type { SubmitEventPromise } from 'vuetify'
 import type { RoomPayload, StudyRoom } from '@/api/types'
 import { isoToLocalInput, localInputToIso } from '@/utils/datetime'
 
@@ -13,10 +14,16 @@ const maxPersonnel = ref(props.initial?.maxPersonnel ?? 10)
 const startDate = ref(props.initial ? isoToLocalInput(props.initial.startDate) : '')
 const endDate = ref(props.initial ? isoToLocalInput(props.initial.endDate) : '')
 
-function onSubmit() {
+// 시작 < 종료 같은 업무 규칙은 서버가 최종 검사하고, 여기서는 빈 값·형식만 확인한다.
+const required = (v: unknown) => (v !== '' && v !== null && v !== undefined) || '필수 입력입니다.'
+const positive = (v: number) => Number(v) >= 1 || '1명 이상이어야 합니다.'
+
+async function onSubmit(event: SubmitEventPromise) {
+  const { valid } = await event
+  if (!valid) return
   emit('submit', {
     name: name.value.trim(),
-    maxPersonnel: maxPersonnel.value,
+    maxPersonnel: Number(maxPersonnel.value),
     startDate: localInputToIso(startDate.value),
     endDate: localInputToIso(endDate.value),
   })
@@ -24,24 +31,40 @@ function onSubmit() {
 </script>
 
 <template>
-  <!-- 시작 < 종료 같은 업무 규칙은 서버가 최종 검사하고, 여기서는 빈 값만 막는다 -->
-  <form class="row" @submit.prevent="onSubmit">
-    <label class="field">
-      이름
-      <input v-model="name" required maxlength="50" />
-    </label>
-    <label class="field">
-      최대 인원
-      <input v-model.number="maxPersonnel" type="number" min="1" required style="width: 90px" />
-    </label>
-    <label class="field">
-      운영 시작
-      <input v-model="startDate" type="datetime-local" required />
-    </label>
-    <label class="field">
-      운영 종료
-      <input v-model="endDate" type="datetime-local" required />
-    </label>
-    <button type="submit" :disabled="busy" style="align-self: flex-end">{{ submitLabel }}</button>
-  </form>
+  <v-form @submit.prevent="onSubmit">
+    <v-row dense>
+      <v-col cols="12" sm="8">
+        <v-text-field v-model="name" label="이름" maxlength="50" :rules="[required]" />
+      </v-col>
+      <v-col cols="12" sm="4">
+        <v-text-field
+          v-model.number="maxPersonnel"
+          label="최대 인원"
+          type="number"
+          min="1"
+          suffix="명"
+          :rules="[required, positive]"
+        />
+      </v-col>
+      <v-col cols="12" sm="6">
+        <v-text-field
+          v-model="startDate"
+          label="운영 시작"
+          type="datetime-local"
+          :rules="[required]"
+        />
+      </v-col>
+      <v-col cols="12" sm="6">
+        <v-text-field
+          v-model="endDate"
+          label="운영 종료"
+          type="datetime-local"
+          :rules="[required]"
+        />
+      </v-col>
+    </v-row>
+    <div class="d-flex justify-end">
+      <v-btn type="submit" color="primary" :loading="busy">{{ submitLabel }}</v-btn>
+    </div>
+  </v-form>
 </template>

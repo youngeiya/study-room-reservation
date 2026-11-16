@@ -8,6 +8,8 @@ import vueDevTools from 'vite-plugin-vue-devtools'
 export default defineConfig({
   plugins: [vue(), vueDevTools()],
   resolve: {
+    // 같은 라이브러리가 번들에 두 벌 들어가지 않게 한다 (pinia 가 두 벌이면 스토어를 찾지 못한다)
+    dedupe: ['vue', 'pinia'],
     alias: {
       '@': fileURLToPath(new URL('./src', import.meta.url)),
     },

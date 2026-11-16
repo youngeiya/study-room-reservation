@@ -1,17 +1,19 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { mdiArrowLeft, mdiCalendarClock, mdiDelete, mdiPencil } from '@mdi/js'
 import { api } from '@/api'
 import type { RoomPayload, StudyRoom, VisitAction, VisitHistory, VisitView } from '@/api/types'
 import RoomForm from '@/components/RoomForm.vue'
 import { useAction } from '@/composables/useAction'
 import { useSessionStore } from '@/stores/session'
 import { formatDateTime, isoToLocalInput, localInputToIso } from '@/utils/datetime'
+import { isFull as isRoomFull, occupancyColor, occupancyPercent } from '@/utils/room'
 
 const route = useRoute()
 const router = useRouter()
 const session = useSessionStore()
-const { error, busy, run } = useAction()
+const { error, errorCode, busy, run } = useAction()
 
 const roomId = computed(() => Number(route.params.id))
 const room = ref<StudyRoom | null>(null)
@@ -23,7 +25,7 @@ const editingVisit = ref(false) // 학생: 시간 수정 입력 표시
 const visitInput = ref('') // 신청·수정에 쓰는 datetime-local 값
 
 const isDeleted = computed(() => room.value?.deletedAt != null)
-const isFull = computed(() => !!room.value && room.value.currentCount >= room.value.maxPersonnel)
+const isFull = computed(() => !!room.value && isRoomFull(room.value))
 const activeVisit = computed(() => (myVisit.value?.status === 'ACTIVE' ? myVisit.value : null))
 
 // 운영 기간 안에서만 고를 수 있게 입력창의 min/max 를 맞춘다 (최종 검사는 서버가 한다)
@@ -34,6 +36,11 @@ const actionLabel: Record<VisitAction, string> = {
   CREATE: '신청',
   UPDATE: '시간 수정',
   CANCEL: '취소',
+}
+const actionColor: Record<VisitAction, string> = {
+  CREATE: 'success',
+  UPDATE: 'primary',
+  CANCEL: 'error',
 }
 
 async function load() {
@@ -72,7 +79,7 @@ async function removeRoom() {
 // ── 학생 ──
 // FR-VST-01: 방문 신청 (운영 기간·정원·중복 검사는 서버가 한다)
 async function apply() {
-  if (session.studentId === null) return
+  if (session.studentId === null || !visitInput.value) return
   const created = await run(() =>
     api.createVisit(roomId.value, {
       studentId: session.studentId!,
@@ -82,6 +89,13 @@ async function apply() {
   if (created) {
     visitInput.value = ''
     await load()
+  } else if (errorCode.value === 'ROOM_FULL') {
+    // 정원 초과는 눈에 띄게 경고창으로 알린다. (판단은 서버가 하고, 화면은 그 결과를 알려 줄 뿐)
+    // 다른 사람이 먼저 신청해서 막 마감된 경우일 수 있으니 최신 인원으로 화면도 갱신한다.
+    await load()
+    alert(
+      `정원이 가득 차서 신청할 수 없습니다.\n(신청 인원 ${room.value?.currentCount ?? '-'} / 최대 ${room.value?.maxPersonnel ?? '-'}명)`,
+    )
   }
 }
 
@@ -118,84 +132,138 @@ async function cancelVisit() {
 </script>
 
 <template>
-  <p v-if="error" class="error">{{ error }}</p>
+  <v-btn variant="text" :prepend-icon="mdiArrowLeft" :to="{ name: 'rooms' }" class="mb-2">
+    자습실 목록
+  </v-btn>
+
+  <v-alert v-if="error" type="error" variant="tonal" class="mb-4">{{ error }}</v-alert>
 
   <template v-if="room">
-    <section class="panel">
-      <div class="row" style="justify-content: space-between">
-        <h1>
-          {{ room.name }}
-          <span v-if="isDeleted" class="badge off">삭제됨</span>
-          <span v-else-if="isFull" class="badge full">마감</span>
-          <span v-else class="badge ok">신청 가능</span>
-        </h1>
-        <div v-if="session.isInstructor && !isDeleted" class="row">
-          <button class="secondary" @click="editingRoom = !editingRoom">
-            {{ editingRoom ? '수정 닫기' : '수정' }}
-          </button>
-          <button class="danger" :disabled="busy" @click="removeRoom">삭제</button>
+    <!-- 자습실 정보 -->
+    <v-card class="mb-4">
+      <v-card-item>
+        <template #title>
+          <span class="text-h5 font-weight-bold">{{ room.name }}</span>
+        </template>
+        <template #append>
+          <v-chip v-if="isDeleted" color="grey" variant="flat">삭제됨</v-chip>
+          <v-chip v-else-if="isFull" color="error" variant="flat">마감</v-chip>
+          <v-chip v-else color="success" variant="flat">신청 가능</v-chip>
+        </template>
+      </v-card-item>
+
+      <v-card-text>
+        <div class="d-flex align-center text-body-1 mb-4">
+          <v-icon :icon="mdiCalendarClock" class="me-2" />
+          {{ formatDateTime(room.startDate) }} ~ {{ formatDateTime(room.endDate) }}
         </div>
-      </div>
 
-      <p>
-        운영 기간: {{ formatDateTime(room.startDate) }} ~ {{ formatDateTime(room.endDate) }}<br />
-        신청 인원: {{ room.currentCount }} / {{ room.maxPersonnel }}명
-      </p>
+        <div class="d-flex justify-space-between mb-1">
+          <span>신청 인원</span>
+          <strong>{{ room.currentCount }} / {{ room.maxPersonnel }}명</strong>
+        </div>
+        <v-progress-linear
+          :model-value="occupancyPercent(room)"
+          :color="occupancyColor(room)"
+          height="12"
+          rounded
+        />
+      </v-card-text>
 
-      <RoomForm
-        v-if="editingRoom"
-        :initial="room"
-        submit-label="저장"
-        :busy="busy"
-        @submit="updateRoom"
-      />
-    </section>
+      <v-card-actions v-if="session.isInstructor && !isDeleted">
+        <v-btn
+          :prepend-icon="mdiPencil"
+          variant="tonal"
+          color="primary"
+          @click="editingRoom = !editingRoom"
+        >
+          {{ editingRoom ? '수정 닫기' : '수정' }}
+        </v-btn>
+        <v-btn
+          :prepend-icon="mdiDelete"
+          variant="text"
+          color="error"
+          :disabled="busy"
+          @click="removeRoom"
+        >
+          삭제
+        </v-btn>
+      </v-card-actions>
+
+      <v-expand-transition>
+        <div v-if="editingRoom">
+          <v-divider />
+          <v-card-text>
+            <RoomForm :initial="room" submit-label="저장" :busy="busy" @submit="updateRoom" />
+          </v-card-text>
+        </div>
+      </v-expand-transition>
+    </v-card>
 
     <!-- 학생: 신청 / 수정 / 취소 -->
-    <section v-if="!session.isInstructor" class="panel">
-      <h2>내 방문 신청</h2>
-
-      <template v-if="activeVisit">
-        <p>
-          방문 시간: <strong>{{ formatDateTime(activeVisit.visitAt) }}</strong>
-        </p>
-        <div v-if="editingVisit" class="row">
-          <input v-model="visitInput" type="datetime-local" :min="minInput" :max="maxInput" />
-          <button :disabled="busy || !visitInput" @click="saveVisit">저장</button>
-          <button class="secondary" @click="editingVisit = false">닫기</button>
-        </div>
-        <div v-else class="row">
-          <button class="secondary" :disabled="isDeleted" @click="startEditVisit">시간 수정</button>
-          <button class="danger" :disabled="busy" @click="cancelVisit">신청 취소</button>
-        </div>
-      </template>
-
-      <template v-else>
-        <p v-if="myVisit" class="muted">이전 신청은 취소되었습니다. 다시 신청할 수 있어요.</p>
-        <p v-if="isDeleted" class="muted">삭제된 자습실에는 신청할 수 없습니다.</p>
-        <form v-else class="row" @submit.prevent="apply">
-          <label class="field">
-            방문 시간
-            <input
+    <v-card v-if="!session.isInstructor" class="mb-4" title="내 방문 신청">
+      <v-card-text>
+        <template v-if="activeVisit">
+          <p class="mb-4">
+            방문 시간: <strong>{{ formatDateTime(activeVisit.visitAt) }}</strong>
+          </p>
+          <div v-if="editingVisit" class="d-flex flex-wrap ga-2 align-start">
+            <v-text-field
               v-model="visitInput"
               type="datetime-local"
-              required
+              label="방문 시간"
               :min="minInput"
               :max="maxInput"
+              hide-details
+              style="max-width: 280px"
             />
-          </label>
-          <button type="submit" :disabled="busy || isFull" style="align-self: flex-end">
-            {{ isFull ? '정원 마감' : '신청' }}
-          </button>
-        </form>
-      </template>
-    </section>
+            <v-btn color="primary" height="48" :disabled="busy || !visitInput" @click="saveVisit"
+              >저장</v-btn
+            >
+            <v-btn variant="text" height="48" @click="editingVisit = false">닫기</v-btn>
+          </div>
+          <div v-else class="d-flex ga-2">
+            <v-btn variant="tonal" color="primary" :disabled="isDeleted" @click="startEditVisit">
+              시간 수정
+            </v-btn>
+            <v-btn variant="text" color="error" :disabled="busy" @click="cancelVisit"
+              >신청 취소</v-btn
+            >
+          </div>
+        </template>
+
+        <template v-else>
+          <v-alert v-if="myVisit" type="info" variant="tonal" density="compact" class="mb-4">
+            이전 신청은 취소되었습니다. 다시 신청할 수 있어요.
+          </v-alert>
+          <v-alert v-if="isDeleted" type="warning" variant="tonal" density="compact">
+            삭제된 자습실에는 신청할 수 없습니다.
+          </v-alert>
+          <form v-else class="d-flex flex-wrap ga-2 align-start" @submit.prevent="apply">
+            <v-text-field
+              v-model="visitInput"
+              type="datetime-local"
+              label="방문 시간"
+              :min="minInput"
+              :max="maxInput"
+              hide-details
+              style="max-width: 280px"
+            />
+            <!-- 정원이 차 있어도 누를 수 있게 둔다: 누르면 서버가 ROOM_FULL 로 거부하고 경고창을 띄운다 -->
+            <v-btn type="submit" color="primary" height="48" :disabled="busy || !visitInput"
+              >신청</v-btn
+            >
+          </form>
+        </template>
+      </v-card-text>
+    </v-card>
 
     <!-- 강사: 신청·수정·취소 이력 (시간순) -->
-    <section v-if="session.isInstructor" class="panel">
-      <h2>신청 이력</h2>
-      <p v-if="histories.length === 0" class="muted">이력이 없습니다.</p>
-      <table v-else>
+    <v-card v-if="session.isInstructor" title="신청 이력">
+      <v-card-text v-if="histories.length === 0" class="text-medium-emphasis"
+        >이력이 없습니다.</v-card-text
+      >
+      <v-table v-else hover>
         <thead>
           <tr>
             <th>일시</th>
@@ -208,7 +276,11 @@ async function cancelVisit() {
           <tr v-for="h in histories" :key="h.id">
             <td>{{ formatDateTime(h.createdAt) }}</td>
             <td>{{ h.studentName ?? `학생 #${h.studentId}` }}</td>
-            <td>{{ actionLabel[h.action] }}</td>
+            <td>
+              <v-chip :color="actionColor[h.action]" size="small" variant="tonal">
+                {{ actionLabel[h.action] }}
+              </v-chip>
+            </td>
             <td>
               <template v-if="h.action === 'UPDATE'">
                 {{ h.beforeVisitAt ? formatDateTime(h.beforeVisitAt) : '-' }} →
@@ -223,7 +295,7 @@ async function cancelVisit() {
             </td>
           </tr>
         </tbody>
-      </table>
-    </section>
+      </v-table>
+    </v-card>
   </template>
 </template>

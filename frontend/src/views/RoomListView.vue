@@ -1,12 +1,13 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
-import { RouterLink } from 'vue-router'
+import { mdiCalendarRange, mdiDelete, mdiPlus } from '@mdi/js'
 import { api } from '@/api'
 import type { RoomPayload, StudyRoom } from '@/api/types'
 import RoomForm from '@/components/RoomForm.vue'
 import { useAction } from '@/composables/useAction'
 import { useSessionStore } from '@/stores/session'
 import { formatDateTime } from '@/utils/datetime'
+import { isFull, occupancyColor, occupancyPercent } from '@/utils/room'
 
 const session = useSessionStore()
 const { error, busy, run } = useAction()
@@ -42,57 +43,85 @@ onMounted(load)
 </script>
 
 <template>
-  <section class="panel">
-    <div class="row" style="justify-content: space-between">
-      <h1>자습실 목록</h1>
-      <button v-if="session.isInstructor" @click="showForm = !showForm">
-        {{ showForm ? '닫기' : '자습실 등록' }}
-      </button>
-    </div>
+  <div class="d-flex align-center mb-4">
+    <h1 class="text-h5 font-weight-bold">자습실 목록</h1>
+    <v-spacer />
+    <v-btn
+      v-if="session.isInstructor"
+      color="primary"
+      :prepend-icon="mdiPlus"
+      @click="showForm = true"
+    >
+      자습실 등록
+    </v-btn>
+  </div>
 
-    <p v-if="error" class="error">{{ error }}</p>
+  <v-alert v-if="error" type="error" variant="tonal" class="mb-4">{{ error }}</v-alert>
 
-    <div v-if="showForm" class="panel">
-      <h2>자습실 등록</h2>
-      <RoomForm submit-label="등록" :busy="busy" @submit="create" />
-    </div>
+  <v-dialog v-model="showForm" max-width="600">
+    <v-card title="자습실 등록">
+      <v-card-text>
+        <RoomForm submit-label="등록" :busy="busy" @submit="create" />
+      </v-card-text>
+    </v-card>
+  </v-dialog>
 
-    <p v-if="rooms.length === 0" class="muted">등록된 자습실이 없습니다.</p>
-    <table v-else>
-      <thead>
-        <tr>
-          <th>이름</th>
-          <th>운영 기간</th>
-          <th>신청 / 최대</th>
-          <th>상태</th>
-          <th></th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr v-for="room in rooms" :key="room.id">
-          <td>
-            <RouterLink :to="{ name: 'room-detail', params: { id: room.id } }">
+  <v-alert v-if="rooms.length === 0" type="info" variant="tonal">등록된 자습실이 없습니다.</v-alert>
+
+  <v-row v-else>
+    <v-col v-for="room in rooms" :key="room.id" cols="12" sm="6" lg="4">
+      <v-card height="100%" class="d-flex flex-column">
+        <v-card-item>
+          <template #title>
+            <div class="font-weight-bold text-wrap" style="word-break: keep-all">
               {{ room.name }}
-            </RouterLink>
-          </td>
-          <td>{{ formatDateTime(room.startDate) }} ~ {{ formatDateTime(room.endDate) }}</td>
-          <td>{{ room.currentCount }} / {{ room.maxPersonnel }}</td>
-          <td>
-            <span v-if="room.currentCount >= room.maxPersonnel" class="badge full">마감</span>
-            <span v-else class="badge ok">신청 가능</span>
-          </td>
-          <td>
-            <button
-              v-if="session.isInstructor"
-              class="danger"
-              :disabled="busy"
-              @click="remove(room)"
-            >
-              삭제
-            </button>
-          </td>
-        </tr>
-      </tbody>
-    </table>
-  </section>
+            </div>
+          </template>
+          <template #append>
+            <v-chip v-if="isFull(room)" color="error" size="small" variant="flat">마감</v-chip>
+            <v-chip v-else color="success" size="small" variant="flat">신청 가능</v-chip>
+          </template>
+        </v-card-item>
+
+        <v-card-text class="flex-grow-1">
+          <div class="d-flex align-center text-body-2 text-medium-emphasis mb-3">
+            <v-icon :icon="mdiCalendarRange" size="18" class="me-1" />
+            <span>{{ formatDateTime(room.startDate) }} ~ {{ formatDateTime(room.endDate) }}</span>
+          </div>
+
+          <div class="d-flex justify-space-between text-body-2 mb-1">
+            <span>신청 인원</span>
+            <strong>{{ room.currentCount }} / {{ room.maxPersonnel }}명</strong>
+          </div>
+          <v-progress-linear
+            :model-value="occupancyPercent(room)"
+            :color="occupancyColor(room)"
+            height="10"
+            rounded
+          />
+        </v-card-text>
+
+        <v-card-actions>
+          <v-btn
+            color="primary"
+            variant="tonal"
+            :to="{ name: 'room-detail', params: { id: room.id } }"
+          >
+            상세 보기
+          </v-btn>
+          <v-spacer />
+          <v-btn
+            v-if="session.isInstructor"
+            color="error"
+            variant="text"
+            :prepend-icon="mdiDelete"
+            :disabled="busy"
+            @click="remove(room)"
+          >
+            삭제
+          </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-col>
+  </v-row>
 </template>

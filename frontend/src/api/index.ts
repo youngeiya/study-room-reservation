@@ -2,6 +2,7 @@ import { request } from './client'
 import type {
   RoomPayload,
   Student,
+  StudentPayload,
   StudyRoom,
   VisitHistory,
   VisitReservation,
@@ -20,6 +21,10 @@ export const api = {
 
   // 학생
   listStudents: () => request<Student[]>('GET', '/students'),
+  createStudent: (body: StudentPayload) => request<Student>('POST', '/students', body),
+  updateStudent: (id: number, body: Partial<StudentPayload>) =>
+    request<Student>('PATCH', `/students/${id}`, body),
+  deleteStudent: (id: number) => request<null>('DELETE', `/students/${id}`),
 
   // 방문 신청·이력
   createVisit: (roomId: number, body: { studentId: number; visitAt: string }) =>

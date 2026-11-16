@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
-import { RouterLink } from 'vue-router'
 import { api } from '@/api'
 import type { VisitView } from '@/api/types'
 import { useAction } from '@/composables/useAction'
@@ -48,12 +47,13 @@ onMounted(load)
 </script>
 
 <template>
-  <section class="panel">
-    <h1>내 신청 ({{ session.currentStudent?.name ?? '-' }})</h1>
-    <p v-if="error" class="error">{{ error }}</p>
+  <h1 class="text-h5 font-weight-bold mb-4">내 신청 ({{ session.currentStudent?.name ?? '-' }})</h1>
 
-    <p v-if="visits.length === 0" class="muted">신청한 내역이 없습니다.</p>
-    <table v-else>
+  <v-alert v-if="error" type="error" variant="tonal" class="mb-4">{{ error }}</v-alert>
+
+  <v-alert v-if="visits.length === 0" type="info" variant="tonal">신청한 내역이 없습니다.</v-alert>
+  <v-card v-else>
+    <v-table hover>
       <thead>
         <tr>
           <th>자습실</th>
@@ -65,30 +65,50 @@ onMounted(load)
       <tbody>
         <tr v-for="v in visits" :key="v.id">
           <td>
-            <RouterLink :to="{ name: 'room-detail', params: { id: v.roomId } }">
+            <router-link :to="{ name: 'room-detail', params: { id: v.roomId } }">
               {{ v.roomName ?? `자습실 #${v.roomId}` }}
-            </RouterLink>
+            </router-link>
           </td>
           <td>
-            <div v-if="editingId === v.id" class="row">
-              <input v-model="editValue" type="datetime-local" />
-              <button :disabled="busy" @click="saveEdit(v)">저장</button>
-              <button class="secondary" @click="editingId = null">취소</button>
+            <div v-if="editingId === v.id" class="d-flex flex-wrap ga-2 align-center py-2">
+              <v-text-field
+                v-model="editValue"
+                type="datetime-local"
+                density="compact"
+                hide-details
+                style="min-width: 220px"
+              />
+              <v-btn color="primary" :disabled="busy || !editValue" @click="saveEdit(v)"
+                >저장</v-btn
+              >
+              <v-btn variant="text" @click="editingId = null">닫기</v-btn>
             </div>
             <span v-else>{{ formatDateTime(v.visitAt) }}</span>
           </td>
           <td>
-            <span v-if="v.status === 'ACTIVE'" class="badge ok">신청됨</span>
-            <span v-else class="badge off">취소됨</span>
+            <v-chip v-if="v.status === 'ACTIVE'" color="success" size="small" variant="tonal"
+              >신청됨</v-chip
+            >
+            <v-chip v-else color="grey" size="small" variant="tonal">취소됨</v-chip>
           </td>
-          <td>
-            <div v-if="v.status === 'ACTIVE' && editingId !== v.id" class="row">
-              <button class="secondary" @click="startEdit(v)">시간 수정</button>
-              <button class="danger" :disabled="busy" @click="cancel(v)">신청 취소</button>
-            </div>
+          <td class="text-right">
+            <template v-if="v.status === 'ACTIVE' && editingId !== v.id">
+              <v-btn
+                variant="tonal"
+                color="primary"
+                size="small"
+                class="me-2"
+                @click="startEdit(v)"
+              >
+                시간 수정
+              </v-btn>
+              <v-btn variant="text" color="error" size="small" :disabled="busy" @click="cancel(v)">
+                신청 취소
+              </v-btn>
+            </template>
           </td>
         </tr>
       </tbody>
-    </table>
-  </section>
+    </v-table>
+  </v-card>
 </template>
