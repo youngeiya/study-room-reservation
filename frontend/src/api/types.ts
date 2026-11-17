@@ -110,20 +110,45 @@ export interface RoomPayload {
   endDate: string
 }
 
+export type InstructorPosition =
+  'DIRECTOR' | 'VICE_DIRECTOR' | 'HOMEROOM' | 'LECTURER' | 'ASSISTANT' | 'STAFF'
+export type InstructorStatus = 'ACTIVE' | 'ON_LEAVE' | 'RESIGNED'
+export type Subject = 'KOREAN' | 'MATH' | 'ENGLISH' | 'SOCIAL' | 'SCIENCE' | 'KOREAN_HISTORY'
+
 /** 강사 계정 (비밀번호는 내려오지 않는다) */
 export interface Instructor {
   id: number
   version: number
   loginId: string
   name: string
+  /** 사번 (이전 데이터에는 없을 수 있음) */
+  employeeNo: string | null
+  phone: string | null
+  email: string | null
+  position: InstructorPosition
+  subjects: Subject[]
+  /** 퇴직이면 로그인할 수 없다 */
+  status: InstructorStatus
+  /** 입사일 YYYY-MM-DD */
+  hireDate: string | null
+  memo: string | null
   createdAt: string
   updatedAt: string
   deletedAt: string | null
 }
 
-/** 강사 등록·수정 요청. 수정할 때 password 는 비밀번호를 재설정할 때만 보낸다. */
+/** 강사 등록·수정 요청. 수정할 때 password 는 비밀번호를 재설정할 때만, status 는 수정할 때만 보낸다. */
 export interface InstructorPayload {
   loginId: string
   name: string
   password?: string
+  employeeNo: string
+  phone: string
+  /** 선택 값은 비우면 null 을 보낸다 (서버가 값을 비운다) */
+  email: string | null
+  position: InstructorPosition
+  subjects: Subject[]
+  hireDate: string | null
+  memo: string | null
+  status?: InstructorStatus
 }
