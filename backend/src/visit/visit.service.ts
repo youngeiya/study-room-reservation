@@ -195,6 +195,18 @@ export class VisitService {
   }
 
   /**
+   * 오늘(한국 시간) 방문하는 활성 신청 인원. 강사 화면 상단바의 "오늘 신청 현황"용 요약이다.
+   * 취소된 신청은 세지 않고, 지난 시각이든 앞으로의 시각이든 "오늘 날짜"인 신청은 모두 센다.
+   */
+  async todaySummary(): Promise<{ date: string; todayCount: number }> {
+    const date = kstDay(this.clock.now().toISOString());
+    const today = await this.visits.findAll(
+      (v) => v.status === 'ACTIVE' && kstDay(v.visitAt) === date,
+    );
+    return { date, todayCount: today.length };
+  }
+
+  /**
    * 자습실의 현재 인원을 바꾸는 "유일한" 곳. (신청 +1, 취소 -1)
    * 숫자가 어긋나는 실수를 조용히 넘기지 않도록, 범위를 벗어나면 예외를 던져 트랜잭션 전체를 취소한다.
    */

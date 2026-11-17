@@ -354,6 +354,26 @@ describe('VisitService', () => {
     });
   });
 
+  // ── 오늘 신청 현황 (강사 상단바) ─────────────────────────────
+  it('오늘(한국 시간) 방문하는 활성 신청만 센다 (내일 신청·취소된 신청은 제외)', async () => {
+    const [s1, s2, s3] = await seedStudents(3);
+    const room = await makeRoom(3);
+    // 지금은 한국 시간 11/24 09:00. UTC 05:00 = 한국 14:00 (오늘)
+    const TODAY = '2026-11-24T05:00:00.000Z';
+    await service.create(room.id, { studentId: s1, visitAt: TODAY });
+    await service.create(room.id, { studentId: s2, visitAt: DAY25 }); // 내일
+    const cancelled = await service.create(room.id, {
+      studentId: s3,
+      visitAt: TODAY,
+    });
+    await service.cancel(cancelled.id, { studentId: s3 });
+
+    await expect(service.todaySummary()).resolves.toEqual({
+      date: '2026-11-24',
+      todayCount: 1,
+    });
+  });
+
   // ── 신청 ────────────────────────────────────────────────────
   it('신청하면 ACTIVE 신청과 CREATE 이력이 생기고 인원이 1 늘어난다', async () => {
     const [s1] = await seedStudents(1);

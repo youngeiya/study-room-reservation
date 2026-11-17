@@ -31,6 +31,13 @@ export class VisitController {
     return { maxDaysAhead: maxDaysAhead() };
   }
 
+  // GET /api/visit-summary : 오늘(한국 시간) 방문하는 활성 신청 인원 (강사). 상단바의 "오늘 신청 현황"에 쓴다.
+  @Roles('INSTRUCTOR')
+  @Get('visit-summary')
+  visitSummary(): Promise<{ date: string; todayCount: number }> {
+    return this.visitService.todaySummary();
+  }
+
   // POST /api/study-rooms/1/visits : 방문 신청 (학생)
   @Roles('STUDENT')
   @Post('study-rooms/:roomId/visits')

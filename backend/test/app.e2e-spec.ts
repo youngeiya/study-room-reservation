@@ -230,6 +230,19 @@ describe('로그인과 권한 (e2e)', () => {
       await api().get('/api/booking-policy').expect(401);
     });
 
+    it('오늘 신청 현황은 강사만 볼 수 있다 (학생 403, 로그인 안 하면 401)', async () => {
+      await api().get('/api/visit-summary').set(bearer(student1)).expect(403);
+      await api().get('/api/visit-summary').expect(401);
+      const res = await api()
+        .get('/api/visit-summary')
+        .set(bearer(instructor))
+        .expect(200);
+      expect(res.body.data).toMatchObject({
+        date: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/),
+        todayCount: expect.any(Number),
+      });
+    });
+
     it('내 신청 목록은 볼 수 있지만 다른 학생의 목록은 403', async () => {
       const mine = await api()
         .get('/api/students/1/visits')
