@@ -8,13 +8,24 @@ import type { Repository } from '../storage/repository';
 import { VISIT_REPOSITORY, VisitReservation } from '../visit/visit.entity';
 import { CreateStudyRoomDto } from './dto/create-study-room.dto';
 import { UpdateStudyRoomDto } from './dto/update-study-room.dto';
+import { DEFAULT_BRANCH } from './branch';
+import type { BranchCode } from './branch';
 import { STUDY_ROOM_REPOSITORY, StudyRoom } from './study-room.entity';
 
 // 처음 실행할 때 넣어 둘 예시 자습실 (정원 10명, 10명, 5명).
-const SEED_ROOMS = [
-  { name: '부엉이 라이브러리 1관', maxPersonnel: 10 },
-  { name: '부엉이 라이브러리 2관', maxPersonnel: 10 },
-  { name: '부엉이 라이브러리 3관 (소수 정예)', maxPersonnel: 5 },
+// 지점이 골고루 보이도록 H관·S관·목동에 하나씩 둔다 (반포는 비어 있는 지점의 예시).
+const SEED_ROOMS: {
+  name: string;
+  branch: BranchCode;
+  maxPersonnel: number;
+}[] = [
+  { name: '부엉이 라이브러리 1관', branch: 'H', maxPersonnel: 10 },
+  { name: '부엉이 라이브러리 2관', branch: 'S', maxPersonnel: 10 },
+  {
+    name: '부엉이 라이브러리 3관 (소수 정예)',
+    branch: 'MOKDONG',
+    maxPersonnel: 5,
+  },
 ];
 // 올릴 수 있는 사진 형식. 파일 내용의 첫 바이트(매직 넘버)로 판별한다 (확장자·Content-Type 은 속일 수 있어서)
 function sniffImage(data: Buffer): { ext: string; contentType: string } | null {
@@ -76,7 +87,21 @@ export class StudyRoomService implements OnModuleInit {
    * 사용자가 자습실을 모두 지워도 재시작할 때 다시 생기지 않는다.
    */
   async onModuleInit() {
-    if ((await this.rooms.findAll()).length > 0) return;
+    const existing = await this.rooms.findAll();
+    if (existing.length > 0) {
+      // 지점이 정해지기 전에 만든 자습실은 기본 지점(H관)으로 채운다 (강사가 자습실 수정에서 바꿀 수 있다)
+      const targets = existing.filter(
+        (r) => (r as Partial<StudyRoom>).branch === undefined,
+      );
+      if (targets.length > 0) {
+        await this.db.transaction(async () => {
+          for (const r of targets) {
+            await this.rooms.update({ ...r, branch: DEFAULT_BRANCH });
+          }
+        });
+      }
+      return;
+    }
     const nowDate = this.clock.now();
     const now = nowDate.toISOString();
     const startDate = new Date(
@@ -124,6 +149,7 @@ export class StudyRoomService implements OnModuleInit {
     return this.db.transaction(() =>
       this.rooms.create({
         name: dto.name,
+        branch: dto.branch,
         maxPersonnel: dto.maxPersonnel,
         currentCount: 0, // 새 자습실은 신청이 없다
         imageKey: null, // 사진은 등록 후 따로 올린다
@@ -151,6 +177,7 @@ export class StudyRoomService implements OnModuleInit {
       const next: StudyRoom = {
         ...room,
         name: dto.name ?? room.name,
+        branch: dto.branch ?? room.branch ?? DEFAULT_BRANCH,
         maxPersonnel: dto.maxPersonnel ?? room.maxPersonnel,
         startDate: dto.startDate ? this.toIso(dto.startDate) : room.startDate,
         endDate: dto.endDate ? this.toIso(dto.endDate) : room.endDate,
@@ -161,6 +188,16 @@ export class StudyRoomService implements OnModuleInit {
       // 종료 일시를 바꾸는 경우에만 검사한다 (이미 끝난 자습실의 이름 등 다른 정보는 계속 수정할 수 있게)
       if (dto.endDate) this.assertNotEnded(next.endDate);
 
+      // 규칙 0) 신청이 남아 있는 자습실은 지점을 옮길 수 없다 (학생이 가기로 한 장소가 바뀌어 버리므로,
+      //        강사가 먼저 신청을 정리하게 한다. 운영 기간·정원 규칙과 같은 원칙)
+      if (
+        next.branch !== (room.branch ?? DEFAULT_BRANCH) &&
+        room.currentCount > 0
+      ) {
+        throw new BusinessException('BRANCH_CHANGE_HAS_VISITS', {
+          currentCount: room.currentCount,
+        });
+      }
       // 규칙 1) 최대 인원을 현재 신청 수보다 작게 줄일 수 없다 (같은 값까지는 허용)
       if (next.maxPersonnel < room.currentCount) {
         throw new BusinessException('CAPACITY_BELOW_APPLIED', {

@@ -1,5 +1,6 @@
 import {
   IsDateString,
+  IsIn,
   IsInt,
   IsNotEmpty,
   IsOptional,
@@ -8,6 +9,8 @@ import {
   Max,
   Min,
 } from 'class-validator';
+import { BRANCH_CODES } from '../branch';
+import type { BranchCode } from '../branch';
 
 /** 보낸 필드만 수정한다 (PATCH). */
 export class UpdateStudyRoomDto {
@@ -16,6 +19,10 @@ export class UpdateStudyRoomDto {
   @IsNotEmpty()
   @MaxLength(50)
   name?: string;
+
+  @IsOptional()
+  @IsIn(BRANCH_CODES, { message: '지점을 선택해 주세요.' })
+  branch?: BranchCode;
 
   @IsOptional()
   @IsInt()

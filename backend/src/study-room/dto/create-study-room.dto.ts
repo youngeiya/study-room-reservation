@@ -1,5 +1,6 @@
 import {
   IsDateString,
+  IsIn,
   IsInt,
   IsNotEmpty,
   IsString,
@@ -7,12 +8,18 @@ import {
   Max,
   Min,
 } from 'class-validator';
+import { BRANCH_CODES } from '../branch';
+import type { BranchCode } from '../branch';
 
 export class CreateStudyRoomDto {
   @IsString()
   @IsNotEmpty()
   @MaxLength(50)
   name: string;
+
+  // 소속 지점: 자습실은 반드시 한 지점에 속한다
+  @IsIn(BRANCH_CODES, { message: '지점을 선택해 주세요.' })
+  branch: BranchCode;
 
   @IsInt()
   @Min(1)

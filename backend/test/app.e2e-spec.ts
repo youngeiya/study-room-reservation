@@ -65,6 +65,7 @@ describe('로그인과 권한 (e2e)', () => {
       .set(bearer(instructor))
       .send({
         name: 'e2e 자습실',
+        branch: 'S',
         maxPersonnel: 5,
         startDate: iso(-1),
         endDate: iso(30),
@@ -350,6 +351,7 @@ describe('로그인과 권한 (e2e)', () => {
         .set(t)
         .send({
           name: 'x',
+          branch: 'H',
           maxPersonnel: 501,
           startDate: iso(0),
           endDate: iso(5),
@@ -362,6 +364,7 @@ describe('로그인과 권한 (e2e)', () => {
         .set(t)
         .send({
           name: 'x',
+          branch: 'H',
           maxPersonnel: 5,
           startDate: iso(-10),
           endDate: iso(-1),
@@ -480,6 +483,39 @@ describe('로그인과 권한 (e2e)', () => {
       const res = await api().get(`/api/study-rooms/${roomId}/image`);
       expect(res.status).toBe(404);
       expect(res.body.code).toBe('IMAGE_NOT_FOUND');
+    });
+  });
+
+  describe('자습실 지점', () => {
+    it('자습실에는 지점이 저장되어 내려오고, 지점이 없거나 목록에 없는 값이면 400', async () => {
+      const room = await api()
+        .get(`/api/study-rooms/${roomId}`)
+        .set(bearer(student1))
+        .expect(200);
+      expect(room.body.data.branch).toBe('S');
+
+      const base = {
+        name: '지점 테스트',
+        maxPersonnel: 3,
+        startDate: iso(-1),
+        endDate: iso(30),
+      };
+      await api()
+        .post('/api/study-rooms')
+        .set(bearer(instructor))
+        .send(base)
+        .expect(400);
+      await api()
+        .post('/api/study-rooms')
+        .set(bearer(instructor))
+        .send({ ...base, branch: 'GANGNAM' })
+        .expect(400);
+      const created = await api()
+        .post('/api/study-rooms')
+        .set(bearer(instructor))
+        .send({ ...base, branch: 'BANPO' })
+        .expect(201);
+      expect(created.body.data.branch).toBe('BANPO');
     });
   });
 

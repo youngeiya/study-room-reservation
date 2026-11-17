@@ -70,6 +70,7 @@ describe('StudentService', () => {
   const makeRoom = () =>
     roomService.create({
       name: '1자습실',
+      branch: 'H' as const,
       maxPersonnel: 3,
       startDate: '2026-11-20T00:00:00.000Z',
       endDate: '2026-11-30T00:00:00.000Z',

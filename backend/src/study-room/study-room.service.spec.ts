@@ -12,6 +12,7 @@ import { StudyRoomService } from './study-room.service';
 const NOW = '2026-11-13T00:00:00.000Z';
 const base = {
   name: '1자습실',
+  branch: 'H' as const,
   maxPersonnel: 3,
   startDate: '2026-11-20T00:00:00.000Z',
   endDate: '2026-11-30T00:00:00.000Z',
@@ -108,6 +109,7 @@ describe('StudyRoomService', () => {
       const ended = await db.transaction(() =>
         rooms.create({
           name: '끝난 자습실',
+          branch: 'H' as const,
           maxPersonnel: 3,
           currentCount: 0,
           imageKey: null,
@@ -301,6 +303,55 @@ describe('StudyRoomService', () => {
       expect(images.files.size).toBe(0);
       // 사진이 없는 상태에서 또 지워도 오류가 아니다
       await expect(service.removeImage(room.id)).resolves.toBeDefined();
+    });
+  });
+
+  describe('지점', () => {
+    it('처음 실행하면 예시 자습실이 H관·S관·목동에 하나씩 들어간다', async () => {
+      await service.onModuleInit();
+      const list = await service.findAll();
+      expect(list.map((r) => r.branch).sort()).toEqual(['H', 'MOKDONG', 'S']);
+    });
+
+    it('지점이 정해지기 전에 만든 자습실은 시작할 때 H관으로 채워진다', async () => {
+      const room = await service.create({ ...base });
+      await db.transaction(async () => {
+        const old = {
+          ...(await rooms.findById(room.id))!,
+        } as Partial<StudyRoom>;
+        delete old.branch;
+        await rooms.update(old as StudyRoom);
+      });
+      await service.onModuleInit();
+      expect((await service.findOne(room.id)).branch).toBe('H');
+    });
+
+    it('등록할 때 정한 지점이 저장되고, 신청이 없으면 지점을 옮길 수 있다', async () => {
+      const room = await service.create({ ...base, branch: 'BANPO' });
+      expect(room.branch).toBe('BANPO');
+      const moved = await service.update(room.id, { branch: 'S' });
+      expect(moved.branch).toBe('S');
+      // 지점만 바꾸고 나머지는 그대로 유지한다
+      expect(moved).toMatchObject({
+        name: base.name,
+        maxPersonnel: base.maxPersonnel,
+      });
+    });
+
+    it('신청이 남아 있는 자습실은 지점을 옮길 수 없지만, 같은 지점으로 보내거나 다른 정보 수정은 된다', async () => {
+      const room = await service.create({ ...base, branch: 'H' });
+      await addVisit(room.id, 1);
+
+      await expect(
+        service.update(room.id, { branch: 'S' }),
+      ).rejects.toMatchObject({
+        code: 'BRANCH_CHANGE_HAS_VISITS',
+        data: { currentCount: 1 },
+      });
+      await expect(
+        service.update(room.id, { branch: 'H', name: '새 이름' }),
+      ).resolves.toMatchObject({ branch: 'H', name: '새 이름' });
+      expect((await service.findOne(room.id)).branch).toBe('H');
     });
   });
 });

@@ -128,6 +128,7 @@ const kstAt = (offsetDays: number, kstHour: number) => {
   const newRoom = (maxPersonnel = 3) =>
     rooms.create({
       name: '테스트 자습실',
+      branch: 'H' as const,
       maxPersonnel,
       startDate: iso(-1),
       endDate: iso(30),
@@ -150,6 +151,7 @@ const kstAt = (offsetDays: number, kstHour: number) => {
     const end = '2026-12-31T12:34:56.789Z';
     const room = await rooms.create({
       name: '한글 이름 자습실',
+      branch: 'H' as const,
       maxPersonnel: 4,
       startDate: start,
       endDate: end,
@@ -157,6 +159,7 @@ const kstAt = (offsetDays: number, kstHour: number) => {
     const found = await rooms.findOne(room.id);
     expect(found).toMatchObject({
       name: '한글 이름 자습실',
+      branch: 'H' as const,
       maxPersonnel: 4,
       currentCount: 0,
       startDate: start,

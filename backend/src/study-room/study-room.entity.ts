@@ -1,4 +1,6 @@
 /** 날짜는 JSON에 그대로 저장되도록 ISO 8601(UTC) 문자열로 다룬다. */
+import type { BranchCode } from './branch';
+
 export interface StudyRoom {
   id: number;
   /**
@@ -9,6 +11,8 @@ export interface StudyRoom {
   version: number;
   /** 과제 필수 필드는 아니지만, 화면에서 자습실을 구분하기 위해 추가한 필드 */
   name: string;
+  /** 소속 지점 코드 (H · S · MOKDONG · BANPO). 이전 데이터에는 없을 수 있다(없으면 H 로 본다). */
+  branch: BranchCode;
   maxPersonnel: number;
   /**
    * 현재 신청 인원(취소 제외). 저장해 두는 값이다.

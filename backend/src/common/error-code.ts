@@ -152,6 +152,11 @@ export const ErrorCode = {
     status: HttpStatus.CONFLICT,
     message: '현재 신청 인원보다 최대 인원을 작게 줄일 수 없습니다.',
   },
+  BRANCH_CHANGE_HAS_VISITS: {
+    status: HttpStatus.CONFLICT,
+    message:
+      '신청이 남아 있는 자습실은 지점을 바꿀 수 없습니다. 신청을 먼저 취소해 주세요.',
+  },
   PERIOD_CONFLICTS_VISITS: {
     status: HttpStatus.CONFLICT,
     message: '변경할 운영 기간을 벗어나는 신청이 있습니다.',
