@@ -3,7 +3,7 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { mdiCalendarCheck, mdiClockOutline, mdiInformationOutline } from '@mdi/js'
 import { api } from '@/api'
 import type { VisitView } from '@/api/types'
-import { BRANCHES } from '@/config/academy'
+import { HALLS } from '@/config/academy'
 import { useSessionStore } from '@/stores/session'
 import { useStatusStore } from '@/stores/status'
 import { isOpenNow } from '@/utils/openingHours'
@@ -16,8 +16,8 @@ const status = useStatusStore()
 
 // ── 운영 상태 ──
 const now = ref(new Date())
-const openCount = computed(() => BRANCHES.filter((b) => isOpenNow(b, now.value) === true).length)
-const hasHours = BRANCHES.some((b) => b.hours !== null)
+const openCount = computed(() => HALLS.filter((b) => isOpenNow(b, now.value) === true).length)
+const hasHours = HALLS.some((b) => b.hours !== null)
 
 // ── 개인 현황 ──
 const nextVisit = ref<VisitView | null>(null) // 학생: 다음 방문
@@ -75,7 +75,7 @@ watch(() => status.version, loadPersonal)
 
 <template>
   <div class="header-status d-flex align-center ga-2">
-    <!-- 운영 상태: 누르면 지점별 운영 시간(이용 안내)을 연다 -->
+    <!-- 운영 상태: 누르면 관별 운영 시간(이용 안내)을 연다 -->
     <v-chip
       v-if="hasHours"
       :color="openCount > 0 ? 'success' : 'grey'"
@@ -84,7 +84,7 @@ watch(() => status.version, loadPersonal)
       :prepend-icon="mdiClockOutline"
       @click="emit('openInfo')"
     >
-      {{ openCount > 0 ? `운영 중 · ${openCount}개 지점` : '운영 종료' }}
+      {{ openCount > 0 ? `운영 중 · ${openCount}개 관` : '운영 종료' }}
     </v-chip>
 
     <!-- 학생: 다음 방문 -->

@@ -1,23 +1,23 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import type { SubmitEventPromise } from 'vuetify'
-import type { BranchCode, RoomPayload, StudyRoom } from '@/api/types'
-import { BRANCHES } from '@/config/academy'
+import type { HallCode, RoomPayload, StudyRoom } from '@/api/types'
+import { HALLS } from '@/config/academy'
 import { isoToLocalInput, localInputToIso } from '@/utils/datetime'
 
 // 등록과 수정이 같은 폼을 쓴다. initial 이 있으면 수정, 없으면 등록.
 const props = defineProps<{
   initial?: StudyRoom
-  /** 등록할 때 처음 선택해 둘 지점 (지점 탭에서 등록 버튼을 누른 경우) */
-  defaultBranch?: BranchCode | null
+  /** 등록할 때 처음 선택해 둘 관 (관 탭에서 등록 버튼을 누른 경우) */
+  defaultHall?: HallCode | null
   submitLabel: string
   busy: boolean
 }>()
 const emit = defineEmits<{ submit: [payload: RoomPayload] }>()
 
 const name = ref(props.initial?.name ?? '')
-const branch = ref<BranchCode | null>(props.initial?.branch ?? props.defaultBranch ?? null)
-const branchItems = BRANCHES.map((b) => ({ value: b.code, title: b.short }))
+const hall = ref<HallCode | null>(props.initial?.hall ?? props.defaultHall ?? null)
+const hallItems = HALLS.map((b) => ({ value: b.code, title: b.short }))
 const maxPersonnel = ref(props.initial?.maxPersonnel ?? 10)
 // <input type="datetime-local"> 은 내 시간대 문자열을 쓰므로 서버 값(UTC)을 변환해서 보여 준다.
 const startDate = ref(props.initial ? isoToLocalInput(props.initial.startDate) : '')
@@ -35,7 +35,7 @@ async function onSubmit(event: SubmitEventPromise) {
   if (!valid) return
   emit('submit', {
     name: name.value.trim(),
-    branch: branch.value as BranchCode,
+    hall: hall.value as HallCode,
     maxPersonnel: Number(maxPersonnel.value),
     startDate: localInputToIso(startDate.value),
     endDate: localInputToIso(endDate.value),
@@ -47,7 +47,7 @@ async function onSubmit(event: SubmitEventPromise) {
   <v-form @submit.prevent="onSubmit">
     <v-row dense>
       <v-col cols="12" sm="4">
-        <v-select v-model="branch" label="지점" :items="branchItems" :rules="[required]" />
+        <v-select v-model="hall" label="관" :items="hallItems" :rules="[required]" />
       </v-col>
       <v-col cols="12" sm="8">
         <v-text-field v-model="name" label="이름" maxlength="50" :rules="[required]" />

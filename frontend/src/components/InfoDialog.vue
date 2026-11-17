@@ -1,13 +1,13 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import { mdiClockOutline, mdiMapMarkerOutline, mdiOpenInNew } from '@mdi/js'
+import { mdiClockOutline, mdiMapMarkerOutline } from '@mdi/js'
 import { api } from '@/api'
-import { BRANCHES, INTRO, kakaoMapUrl, naverMapUrl } from '@/config/academy'
-import { isOpenNow } from '@/utils/openingHours'
+import { HALLS, INTRO } from '@/config/academy'
+import { hoursLabel, isOpenNow } from '@/utils/openingHours'
 
-// 이용 안내 · 오시는 길 창. 지점 정보는 config/academy.ts 에서 가져오고, 예약 가능 기간은 서버 정책 값을 쓴다.
+// 이용 안내 · 오시는 길 창. 관 정보는 config/academy.ts 에서 가져오고, 예약 가능 기간은 서버 정책 값을 쓴다.
 const open = defineModel<boolean>({ required: true })
-const tab = ref<'guide' | 'branches'>('guide')
+const tab = ref<'guide' | 'halls'>('guide')
 const maxDaysAhead = ref(3)
 
 // 창을 열 때마다 최신 예약 가능 기간을 가져오고 지금 운영 여부를 다시 계산한다
@@ -22,7 +22,7 @@ watch(open, async (isOpen) => {
   }
 })
 
-const branches = computed(() => BRANCHES.map((b) => ({ ...b, open: isOpenNow(b, now.value) })))
+const halls = computed(() => HALLS.map((h) => ({ ...h, open: isOpenNow(h, now.value) })))
 
 const rules = computed(() => [
   `방문은 지금부터 ${maxDaysAhead.value}일 이내의 시간만 미리 신청할 수 있어요.`,
@@ -39,7 +39,7 @@ const rules = computed(() => [
       <!-- 창이 낮아져도 탭이 찌그러지지 않게 크기를 고정한다 -->
       <v-tabs v-model="tab" color="primary" class="px-2" style="flex: none; min-height: 48px">
         <v-tab value="guide">이용 안내</v-tab>
-        <v-tab value="branches">오시는 길</v-tab>
+        <v-tab value="halls">오시는 길</v-tab>
       </v-tabs>
       <v-divider />
 
@@ -53,13 +53,13 @@ const rules = computed(() => [
               <li v-for="rule in rules" :key="rule" class="mb-2">{{ rule }}</li>
             </ul>
             <v-alert type="info" variant="tonal" density="compact" class="mt-4">
-              지점별 운영 시간과 위치는 <strong>오시는 길</strong> 탭에서 확인하세요.
+              관별 운영 시간과 위치는 <strong>오시는 길</strong> 탭에서 확인하세요.
             </v-alert>
           </v-window-item>
 
-          <!-- 오시는 길: 지점별 주소·운영 시간·지도 링크 -->
-          <v-window-item value="branches">
-            <v-card v-for="b in branches" :key="b.short" variant="outlined" class="mb-3 pa-4">
+          <!-- 오시는 길: 관별 주소·운영 시간 (시연용 가상 정보) -->
+          <v-window-item value="halls">
+            <v-card v-for="b in halls" :key="b.short" variant="outlined" class="mb-3 pa-4">
               <div class="d-flex align-center mb-2">
                 <span class="text-subtitle-1 font-weight-bold">{{ b.short }}</span>
                 <v-chip
@@ -83,37 +83,16 @@ const rules = computed(() => [
                   </div>
                 </div>
               </div>
-              <div class="d-flex align-center mb-3">
+              <div class="d-flex align-center">
                 <v-icon :icon="mdiClockOutline" size="18" class="me-2" />
-                <span v-if="b.hours">매일 {{ b.hours }}</span>
-                <span v-else class="text-medium-emphasis">운영 시간은 지점에 문의해 주세요</span>
-              </div>
-
-              <div class="d-flex ga-2">
-                <v-btn
-                  :href="kakaoMapUrl(b)"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  size="small"
-                  variant="tonal"
-                  :append-icon="mdiOpenInNew"
-                >
-                  카카오맵
-                </v-btn>
-                <v-btn
-                  :href="naverMapUrl(b)"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  size="small"
-                  variant="tonal"
-                  :append-icon="mdiOpenInNew"
-                >
-                  네이버 지도
-                </v-btn>
+                <span :class="b.hours ? '' : 'text-medium-emphasis'">{{
+                  hoursLabel(b.hours)
+                }}</span>
               </div>
             </v-card>
             <div class="text-caption text-medium-emphasis">
-              운영 중 표시는 한국 시간 기준의 매일 운영 시간으로 계산한 값이에요.
+              운영 중 표시는 한국 시간 기준의 운영 시간으로 계산한 값이에요. 이름과 주소는
+              시연용으로 만든 가상의 정보예요.
             </div>
           </v-window-item>
         </v-window>

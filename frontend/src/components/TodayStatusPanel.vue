@@ -3,23 +3,23 @@ import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { mdiChartBox, mdiRefresh } from '@mdi/js'
 import { api } from '@/api'
 import type { StudyRoom } from '@/api/types'
-import { BRANCHES } from '@/config/academy'
+import { HALLS } from '@/config/academy'
 import { occupancyColor, occupancyPercent } from '@/utils/room'
 
-// 사이드바의 "오늘의 현황" 패널: 지점별 신청 현황(그 지점 자습실들의 신청 인원 합계)을 한눈에 보여 준다 (강사·학생 모두).
+// 사이드바의 "오늘의 현황" 패널: 관별 신청 현황(그 관 자습실들의 신청 인원 합계)을 한눈에 보여 준다 (강사·학생 모두).
 // 화면이 열릴 때와 30초마다 서버에서 다시 불러온다. 판단은 서버 값(currentCount)을 그대로 보여 줄 뿐이다.
 const rooms = ref<StudyRoom[]>([])
 const loading = ref(true)
 const failed = ref(false)
 
-// 지점별 집계: 지점 안 자습실의 신청 인원 합계와 최대 인원 합계
+// 관별 집계: 관 안 자습실의 신청 인원 합계와 최대 인원 합계
 const active = computed(() => rooms.value.filter((r) => r.deletedAt === null))
 const rows = computed(() =>
-  BRANCHES.map((branch) => {
-    const list = active.value.filter((r) => (r.branch ?? 'H') === branch.code)
+  HALLS.map((hall) => {
+    const list = active.value.filter((r) => (r.hall ?? 'MAIN') === hall.code)
     const count = list.reduce((sum, r) => sum + r.currentCount, 0)
     const max = list.reduce((sum, r) => sum + r.maxPersonnel, 0)
-    return { branch, rooms: list.length, count, max }
+    return { hall, rooms: list.length, count, max }
   }),
 )
 const total = computed(() => active.value.reduce((sum, r) => sum + r.currentCount, 0))
@@ -50,7 +50,7 @@ onBeforeUnmount(() => clearInterval(timer))
       <span class="status-icon me-3"><v-icon :icon="mdiChartBox" size="20" /></span>
       <div class="flex-grow-1">
         <div class="status-title">오늘의 현황</div>
-        <div class="status-sub">지점별 신청 인원</div>
+        <div class="status-sub">관별 신청 인원</div>
       </div>
       <v-btn
         :icon="mdiRefresh"
@@ -67,11 +67,11 @@ onBeforeUnmount(() => clearInterval(timer))
       등록된 자습실이 없어요.
     </div>
     <template v-else>
-      <!-- 지점별: 그 지점 자습실들의 신청 인원 합계 / 최대 인원 합계 -->
-      <div v-for="row in rows" :key="row.branch.code" class="mb-3">
+      <!-- 관별: 그 관 자습실들의 신청 인원 합계 / 최대 인원 합계 -->
+      <div v-for="row in rows" :key="row.hall.code" class="mb-3">
         <div class="d-flex justify-space-between align-baseline">
           <span class="room-name">
-            {{ row.branch.short }}
+            {{ row.hall.short }}
             <span class="text-medium-emphasis">· 자습실 {{ row.rooms }}곳</span>
           </span>
           <span v-if="row.rooms > 0" class="room-count">{{ row.count }}/{{ row.max }}</span>

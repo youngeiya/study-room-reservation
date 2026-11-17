@@ -4,15 +4,15 @@ export type Role = 'INSTRUCTOR' | 'STUDENT'
 export type VisitStatus = 'ACTIVE' | 'CANCELLED'
 export type VisitAction = 'CREATE' | 'UPDATE' | 'CANCEL'
 
-/** 자습실 소속 지점 코드 (H관 · S관 · 목동 · 반포) */
-export type BranchCode = 'H' | 'S' | 'MOKDONG' | 'BANPO'
+/** 자습실 소속 관 코드 (본관 · 별관 · 동관 · 서관) */
+export type HallCode = 'MAIN' | 'ANNEX' | 'EAST' | 'WEST'
 
 export interface StudyRoom {
   id: number
   version: number
   name: string
-  /** 소속 지점 */
-  branch: BranchCode
+  /** 소속 관 */
+  hall: HallCode
   maxPersonnel: number
   /** 현재 신청 인원(취소 제외) */
   currentCount: number
@@ -110,7 +110,7 @@ export interface StudentPayload {
 /** 자습실 등록·수정 요청 */
 export interface RoomPayload {
   name: string
-  branch: BranchCode
+  hall: HallCode
   maxPersonnel: number
   startDate: string
   endDate: string
