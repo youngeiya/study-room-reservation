@@ -27,7 +27,7 @@
 추가 구현:
 - **로그인과 역할별 화면**: 강사/학생 라디오 버튼 로그인, 비밀번호 해시·토큰, 서버의 역할별 권한 검사, 로그인 시도 제한
 - **예약 규칙**: 예약 가능 기간(지금부터 3일 이내), **하루(한국 시간)에 신청 한 건**, 재원 학생만 신청, 종료된 자습실 등록 거부
-- **강사 계정 관리**: 강사 등록·수정(비밀번호 재설정)·삭제 (학생 관리와 같은 방식)
+- **강사 관리**: 사번·연락처·이메일·직책·담당 과목·재직 상태·입사일·메모를 가진 강사 등록·수정(비밀번호 재설정)·삭제, 검색·필터 (학생 관리와 같은 방식)
 - **학생 주소 검색**(카카오 우편번호)과 **자습실 사진 업로드**(SeaweedFS에 파일 저장)
 - **부엉이 로고와 시대인재 홈페이지 분위기에 맞춘 화면**(Vuetify 테마): 상단 헤더, 왼쪽 사이드바(메뉴 · **오늘의 현황** 패널(자습실별 신청 인원) · 내 정보), 모바일은 햄버거 메뉴
 - **Docker 실행**(frontend·backend·seaweedfs)과 **Oracle 전환**(선택)
@@ -130,7 +130,7 @@ docker compose up -d --build
 
 | 로그인 유형 | 로그인 아이디 | 열리는 화면 | 할 수 있는 일 |
 | --- | --- | --- | --- |
-| 강사 | 강사 아이디 | `/instructor/...` 관리자 | 자습실 등록·수정·삭제(사진 포함), 신청·수정·취소 이력 조회, 학생 등록·수정·삭제, **강사 계정 등록·수정(비밀번호 재설정)·삭제** |
+| 강사 | 강사 아이디 | `/instructor/...` 관리자 | 자습실 등록·수정·삭제(사진 포함), 신청·수정·취소 이력 조회, 학생 등록·수정·삭제, **강사 등록·수정(비밀번호 재설정, 재직 상태 변경)·삭제** |
 | 학생 | 학번 | `/student/...` 자습실 예약 | 방문 신청·시간 수정·취소, 내 신청 조회 |
 
 - 계정(아이디·비밀번호)은 별도로 안내합니다. 학생 등록 때 강사가 초기 비밀번호를 정할 수 있고, 강사·학생 모두 상단의 이름 메뉴에서 **비밀번호를 변경**할 수 있습니다.
@@ -183,7 +183,7 @@ ORACLE_TEST_USER=... ORACLE_TEST_PASSWORD=... ORACLE_TEST_CONNECT_STRING=호스�
 
 기본은 JSON 파일이라 아무 설정이 필요 없습니다. 실서비스를 가정해 **같은 서비스 코드를 Oracle에서도 실행**할 수 있게 했고, 환경 변수만 바꾸면 전환됩니다.
 
-1. [db/oracle/](db/oracle/)의 SQL로 스키마를 만듭니다 (`01_create_user.sql` → `02_schema.sql` → `03_seed.sql`). 로그인 기능이 생기기 전에 만든 스키마라면 `05_auth_migration.sql`을 추가로, 주소 필드가 생기기 전에 만든 스키마라면 `06_address_migration.sql`, 자습실 사진 기능이 생기기 전에 만든 스키마라면 `07_room_image_migration.sql`, "하루 1건" 규칙이 생기기 전에 만든 스키마라면 `08_one_visit_per_day_migration.sql`, 강사 관리 기능이 생기기 전에 만든 스키마라면 `09_instructor_management_migration.sql`도 실행합니다.
+1. [db/oracle/](db/oracle/)의 SQL로 스키마를 만듭니다 (`01_create_user.sql` → `02_schema.sql` → `03_seed.sql`). 로그인 기능이 생기기 전에 만든 스키마라면 `05_auth_migration.sql`을 추가로, 주소 필드가 생기기 전에 만든 스키마라면 `06_address_migration.sql`, 자습실 사진 기능이 생기기 전에 만든 스키마라면 `07_room_image_migration.sql`, "하루 1건" 규칙이 생기기 전에 만든 스키마라면 `08_one_visit_per_day_migration.sql`, 강사 관리 기능이 생기기 전에 만든 스키마라면 `09_instructor_management_migration.sql`, 강사 등록 항목이 확장되기 전에 만든 스키마라면 `10_instructor_profile_migration.sql`도 실행합니다.
 2. 환경 변수를 설정하고 백엔드를 실행합니다. 프론트엔드는 바꿀 것이 없습니다.
 
 ```bash
@@ -220,8 +220,8 @@ Docker에서는 같은 변수를 실행할 때 넘기면 됩니다: `DB_TYPE=ora
 | PATCH | `/students/:id` | 학생 수정 (보낸 필드만, `status`로 재원·휴원·퇴원 변경, `password`로 재설정, 선택 값은 `null`로 비움) | FR-STD-02 | 강사 |
 | DELETE | `/students/:id` | 학생 삭제 (Soft Delete, 활성 신청이 있으면 거부) | FR-STD-02 | 강사 |
 | GET | `/instructors` | 강사 목록 (삭제 제외, 비밀번호 해시 없음) | 추가 | 강사 |
-| POST | `/instructors` | 강사 등록 `{loginId, name, password}` | 추가 | 강사 |
-| PATCH | `/instructors/:id` | 강사 수정 (보낸 필드만, `password`로 비밀번호 재설정) | 추가 | 강사 |
+| POST | `/instructors` | 강사 등록 `{loginId, password, name, employeeNo, phone, email?, position?, subjects?, hireDate?, memo?}` | 추가 | 강사 |
+| PATCH | `/instructors/:id` | 강사 수정 (보낸 필드만, `password`로 비밀번호 재설정, `status`로 재직·휴직·퇴직 변경, 선택 값은 `null`로 비움) | 추가 | 강사 |
 | DELETE | `/instructors/:id` | 강사 삭제 (Soft Delete, **자기 자신은 삭제 불가**) | 추가 | 강사 |
 | POST | `/study-rooms/:roomId/visits` | 방문 신청 `{visitAt}` (신청자는 토큰의 학생) | FR-VST-01 | 학생 |
 | PATCH | `/visits/:id` | 방문 시간 수정 `{visitAt}` (본인 신청만) | FR-VST-02 | 학생 |
@@ -333,7 +333,10 @@ frontend/src
 | `NOT_VISIT_OWNER` | 403 | 본인의 신청이 아님 |
 | `ROOM_NOT_FOUND` / `STUDENT_NOT_FOUND` / `VISIT_NOT_FOUND` / `INSTRUCTOR_NOT_FOUND` | 404 | 대상 없음 (삭제된 학생·강사의 수정·삭제도 `*_NOT_FOUND`) |
 | `INSTRUCTOR_LOGIN_ID_DUPLICATED` | 409 | 이미 쓰는 강사 아이디로 등록·수정 |
+| `INSTRUCTOR_EMPLOYEE_NO_DUPLICATED` | 409 | 이미 쓰는 사번으로 등록·수정 |
 | `CANNOT_DELETE_SELF` | 409 | 강사가 자기 자신의 계정을 삭제하려 함 |
+| `CANNOT_RESIGN_SELF` | 409 | 강사가 자기 자신을 퇴직 처리하려 함 |
+| `INVALID_HIRE_DATE` | 400 | 실제로 없는 입사일 (예: 2월 31일) |
 | `STUDENT_HAS_ACTIVE_VISITS` | 409 | 활성 신청이 남은 학생을 삭제하거나 휴원·퇴원으로 바꾸려 함 (`data.visitIds`에 그 신청들) |
 | `STUDENT_NO_DUPLICATED` | 409 | 이미 쓰는 학번으로 등록·수정 |
 | `STUDENT_NOT_ENROLLED` | 409 | 휴원·퇴원 학생이 방문을 신청 |
@@ -400,18 +403,27 @@ erDiagram
 
 학번을 비워 둘 수 있는(null) 이유는 **이전 버전에서 저장된 학생과의 호환** 때문입니다. 서버가 시작될 때 새 필드가 없는 이전 행은 기본값(재원, 값 없음)으로 채워집니다. 새로 등록하는 학생은 학번이 필수입니다. 이전 데이터 중 비밀번호가 없고 학번이 있는 학생은 서버가 시작될 때 학번을 초기 비밀번호로 채웁니다(학번이 없으면 강사가 학번을 정해 줄 때까지 로그인 불가). 주민번호 같은 정보는 개인정보 최소 수집 원칙에 따라 일부러 넣지 않았습니다.
 
-### Instructor (강사 계정)
+### Instructor (강사)
+
+로그인 정보에 더해, 학원에서 강사를 관리할 때 실제로 쓰는 인사·담당 정보를 둡니다.
 
 | 필드 | 타입 | 설명 |
 | --- | --- | --- |
 | id, version | number | PK, 낙관적 락용 버전 |
 | loginId | string | 로그인 아이디 (**삭제되지 않은 강사끼리** 중복 불가) |
 | passwordHash | string | 비밀번호 해시 (원문 저장 안 함, 응답에 내려가지 않음) |
-| name | string | 표시 이름 |
+| name | string | 이름 |
+| employeeNo | string \| null | **사번(직원번호)**. 삭제되지 않은 강사끼리 중복 불가 (처음 만든 원장 계정은 비어 있을 수 있음) |
+| phone, email | string \| null | 휴대폰 번호(형식 검사), 이메일(선택). 상담·긴급 연락용 |
+| position | enum | **직책**: `DIRECTOR` 원장 / `VICE_DIRECTOR` 부원장 / `HOMEROOM` 담임강사 / `LECTURER` 강사 / `ASSISTANT` 조교 / `STAFF` 행정·상담 |
+| subjects | string[] | **담당 과목** (여러 개): `KOREAN` 국어 / `MATH` 수학 / `ENGLISH` 영어 / `SOCIAL` 사회탐구 / `SCIENCE` 과학탐구 / `KOREAN_HISTORY` 한국사. 저장은 쉼표로 이은 문자열 |
+| status | enum | **재직 상태**: `ACTIVE` 재직 / `ON_LEAVE` 휴직 / `RESIGNED` 퇴직. **퇴직이면 로그인할 수 없다** (휴직은 가능). 실무에서는 계정을 지우는 대신 퇴직 처리한다 |
+| hireDate | string \| null | 입사일 (YYYY-MM-DD) |
+| memo | string \| null | 메모 (최대 200자) |
 | createdAt, updatedAt | datetime | UTC ISO 문자열 |
 | deletedAt | datetime \| null | Soft Delete. 삭제된 강사는 로그인할 수 없고 이미 받은 토큰도 거부됨 |
 
-강사는 역할이 하나라서 계정 정보만 둡니다. 강사 계정이 하나도 없으면 서버가 시작할 때 기본 계정(`INSTRUCTOR_ID`/`INSTRUCTOR_PASSWORD` 환경 변수, 없으면 코드의 기본값)을 만듭니다.
+강사 계정이 하나도 없으면 서버가 시작할 때 기본 계정(원장, `INSTRUCTOR_ID`/`INSTRUCTOR_PASSWORD` 환경 변수, 없으면 코드의 기본값)을 만듭니다. 이전 버전에서 저장된 강사는 새 필드가 기본값(재직, 강사, 비어 있음)으로 채워집니다.
 
 ### StudyRoom (자습실)
 
@@ -497,6 +509,7 @@ B: 커밋 — version 5 != 6 → 충돌 → 처음부터 재시도 → 10/10 을
 | `05_auth_migration.sql` | 로그인 기능 이전에 만든 스키마에 `student.password_hash`와 `instructor` 테이블을 추가하는 마이그레이션 |
 | `06_address_migration.sql` | 주소 기능 이전에 만든 스키마에 `student.zip_code`, `address`, `address_detail` 컬럼을 추가하는 마이그레이션 |
 | `09_instructor_management_migration.sql` | 강사 관리 기능 이전에 만든 스키마에 `instructor.deleted_at` 컬럼을 추가하고, 아이디 유일 제약을 "삭제되지 않은 강사끼리 유일" 인덱스(`uq_instructor_login_active`)로 바꾸는 마이그레이션 |
+| `10_instructor_profile_migration.sql` | 강사 등록 항목 확장 이전에 만든 스키마에 `employee_no`, `phone`, `email`, `job_title`, `subjects`, `status`, `hire_date`, `memo` 컬럼과 직책·재직 상태 값 제약, 사번 유일 인덱스(`uq_instructor_employee_active`)를 추가하고 기본 계정(admin)을 원장으로 지정하는 마이그레이션 |
 | `08_one_visit_per_day_migration.sql` | "활성 신청 1건" 규칙을 "하루(한국 시간)에 1건"으로 바꾸는 마이그레이션 (`uq_visit_room_student` 제약과 `uq_visit_student_active` 인덱스를 지우고 `uq_visit_student_day` 인덱스를 만든다) |
 | `07_room_image_migration.sql` | 사진 기능 이전에 만든 스키마에 `study_room.image_key` 컬럼을 추가하는 마이그레이션 |
 
@@ -520,7 +533,9 @@ B: 커밋 — version 5 != 6 → 충돌 → 처음부터 재시도 → 10/10 을
 | 방문 시간 수정과 정원 | 인원 변화 없음. 같은 시간으로 수정하면 변경 없음으로 보고 이력을 남기지 않음 | 정원은 자습실 단위, 이력 오염 방지 |
 | 이미 취소한 신청의 취소·수정 | `VISIT_ALREADY_CANCELLED` 오류 | 인원이 두 번 줄거나 이력이 중복되는 것을 방지 |
 | 삭제된 자습실 | 목록에서 제외. 상세·이력 조회 가능. **신청·수정 불가**, 학생의 **취소는 가능** | Soft Delete 취지. 취소는 학생에게 불리하지 않고 인원 정합성도 유지 |
-| 강사 계정 관리 | 강사는 다른 강사를 등록·수정·삭제할 수 있다(비밀번호 재설정 포함). 삭제는 Soft Delete이고 아이디는 삭제되지 않은 강사끼리만 유일하다. **자기 자신은 삭제할 수 없다**(`CANNOT_DELETE_SELF`). 두 강사가 서로를 동시에 삭제해도 한 명은 남도록, 삭제를 요청한 강사의 행도 함께 갱신해 충돌을 감지한다 | 아무도 로그인하지 못하는 상황을 막으려는 규칙. 권한 단계(원장/일반 강사)는 나누지 않았다 |
+| 강사 관리 | 강사는 다른 강사를 등록·수정·삭제할 수 있다(비밀번호 재설정 포함). 등록에는 로그인 아이디·비밀번호·이름·**사번·연락처**가 필수이고, 직책·담당 과목·이메일·입사일·메모는 선택이다. 삭제는 Soft Delete이고 **아이디와 사번은 삭제되지 않은 강사끼리만 유일**하다 | 학원에서 강사를 등록할 때 쓰는 인사·담당 정보를 반영 |
+| 강사 재직 상태 | **퇴직**한 강사는 로그인할 수 없고 이미 받은 토큰도 거부된다. **휴직**은 로그인할 수 있다(학생의 휴원과 같은 원칙). 퇴직해도 계정은 남고 목록에서 볼 수 있으며 다시 재직으로 돌릴 수 있다 | 실무에서는 계정을 지우는 대신 퇴직 처리하고, 기록을 남기려는 목적 |
+| 자기 자신 삭제·퇴직 | **자기 자신은 삭제(`CANNOT_DELETE_SELF`)도 퇴직(`CANNOT_RESIGN_SELF`)도 할 수 없다.** 두 강사가 서로를 동시에 삭제·퇴직시켜도 한 명은 남도록, 요청한 강사의 행도 함께 갱신해 충돌을 감지한다 | 아무도 로그인하지 못하는 상황을 막으려는 규칙. 권한 단계(원장/일반 강사별 기능 제한)는 나누지 않았다 |
 | 삭제된 학생 | 신청 불가(`STUDENT_NOT_FOUND`), 수정·재삭제 불가, 기존 이력에는 이름이 그대로 표시 | Soft Delete 일관성 |
 | 학번 | 삭제되지 않은 학생끼리 **중복 불가** (`STUDENT_NO_DUPLICATED`). 삭제된 학생의 학번은 다시 쓸 수 있다. 동시에 같은 학번으로 등록해도 한 명만 성공한다 | 학번은 사람을 구분하는 기준. 서비스에서 먼저 확인하고, 동시 요청은 저장소의 유니크 제약(커밋 때 검사)이 막는다. 실제 DB라면 `UNIQUE INDEX (student_no) WHERE deleted_at IS NULL` |
 | 재원 상태 | 재원(`ENROLLED`)인 학생만 **신청 가능**(`STUDENT_NOT_ENROLLED`). 휴원·퇴원으로 바꾸려면 **활성 신청이 없어야 한다**(삭제와 같은 원칙). 퇴원은 삭제와 달리 학생 정보를 목록에 남긴다 | 실무에서는 학생을 지우지 않고 퇴원 처리한다. 신청이 남은 채로 상태만 바꾸면 인원이 어긋나므로 먼저 정리하게 한다. 휴원 학생이 이미 가진 신청은 만들 수 없는 상태가 되도록 막는다 |
@@ -587,5 +602,5 @@ B: 커밋 — version 5 != 6 → 충돌 → 처음부터 재시도 → 10/10 을
 - 실제 DB(PostgreSQL 등) 구현체 교체와 유니크 인덱스(학번, 학생당 하루 활성 신청 한 건)
 - 학생 목록의 검색·필터(학년, 재원 상태)와 페이지네이션, 상태 변경 이력(휴원·퇴원 사유)
 - 시간대별 정원, 대기 목록
-- 로그인 시도 제한, 리프레시 토큰·토큰 취소, 강사 계정 관리(여러 강사·권한 분리), 비밀번호 분실 재설정
+- 로그인 시도 제한, 리프레시 토큰·토큰 취소, 강사별 권한 분리(원장/일반 강사), 비밀번호 분실 재설정
 - 신청 상태 변경 알림
