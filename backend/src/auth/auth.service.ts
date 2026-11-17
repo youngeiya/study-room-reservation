@@ -4,6 +4,7 @@ import { Clock } from '../common/clock.service';
 import {
   INSTRUCTOR_REPOSITORY,
   Instructor,
+  canLogin,
   isActiveInstructor,
 } from '../instructor/instructor.entity';
 import { Database } from '../storage/database';
@@ -125,9 +126,9 @@ export class AuthService {
     return row ? this.fromStudent(row) : null;
   }
 
-  // 삭제된 강사는 로그인할 수 없고, 이미 로그인한 토큰도 /auth/me 에서 거부된다
+  // 삭제되었거나 퇴직 처리된 강사는 로그인할 수 없고, 이미 로그인한 토큰도 /auth/me 에서 거부된다 (휴직은 로그인할 수 있다)
   private fromInstructor(row: Instructor) {
-    if (!isActiveInstructor(row)) return null;
+    if (!canLogin(row)) return null; // 삭제되었거나 퇴직한 강사
     return {
       passwordHash: row.passwordHash as string | null,
       user: {

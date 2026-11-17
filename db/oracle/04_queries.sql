@@ -135,8 +135,9 @@ UPDATE student
 -- 아이디가 없든 비밀번호가 틀리든 같은 오류로 응답한다.
 -- ---------------------------------------------------------------------
 -- 강사 로그인
+-- 삭제되었거나 퇴직(RESIGNED)한 강사는 로그인할 수 없다 (휴직은 로그인 가능)
 SELECT id, login_id, password_hash, name FROM instructor
- WHERE login_id = :login_id AND deleted_at IS NULL;
+ WHERE login_id = :login_id AND deleted_at IS NULL AND status <> 'RESIGNED';
 
 -- 학생 로그인: 로그인 아이디는 학번. 삭제된 학생은 제외한다 (퇴원 학생 여부는 앱에서 status 로 거른다)
 SELECT id, student_no, password_hash, name, status

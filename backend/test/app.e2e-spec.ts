@@ -481,9 +481,26 @@ describe('로그인과 권한 (e2e)', () => {
       const created = await api()
         .post('/api/instructors')
         .set(bearer(instructor))
-        .send({ loginId: 'teacher2', name: '박강사', password: 'pw2222' })
+        .send({
+          loginId: 'teacher2',
+          name: '박강사',
+          password: 'pw2222',
+          employeeNo: 'T-002',
+          phone: '010-2222-3333',
+          email: 'park@example.com',
+          position: 'HOMEROOM',
+          subjects: ['MATH', 'KOREAN'],
+          hireDate: '2025-03-02',
+        })
         .expect(201);
       teacherId = created.body.data.id;
+      expect(created.body.data).toMatchObject({
+        employeeNo: 'T-002',
+        position: 'HOMEROOM',
+        subjects: ['KOREAN', 'MATH'],
+        status: 'ACTIVE',
+        hireDate: '2025-03-02',
+      });
       expect(JSON.stringify(created.body)).not.toMatch(/passwordHash/);
 
       const list = await api()
@@ -503,7 +520,13 @@ describe('로그인과 권한 (e2e)', () => {
       const dup = await api()
         .post('/api/instructors')
         .set(bearer(instructor))
-        .send({ loginId: 'teacher2', name: '또', password: 'pw3333' });
+        .send({
+          loginId: 'teacher2',
+          name: '또',
+          password: 'pw3333',
+          employeeNo: 'T-003',
+          phone: '010-3333-4444',
+        });
       expect(dup.status).toBe(409);
       expect(dup.body.code).toBe('INSTRUCTOR_LOGIN_ID_DUPLICATED');
     });
@@ -512,12 +535,24 @@ describe('로그인과 권한 (e2e)', () => {
       await api()
         .post('/api/instructors')
         .set(bearer(instructor))
-        .send({ loginId: '한글', name: 'x', password: 'pw3333' })
+        .send({
+          loginId: '한글',
+          name: 'x',
+          password: 'pw3333',
+          employeeNo: 'T-004',
+          phone: '010-3333-4444',
+        })
         .expect(400);
       await api()
         .post('/api/instructors')
         .set(bearer(instructor))
-        .send({ loginId: 'teacher9', name: 'x', password: 'abc' })
+        .send({
+          loginId: 'teacher9',
+          name: 'x',
+          password: 'abc',
+          employeeNo: 'T-009',
+          phone: '010-3333-4444',
+        })
         .expect(400);
     });
 
@@ -533,6 +568,88 @@ describe('로그인과 권한 (e2e)', () => {
       expect((await login('INSTRUCTOR', 'teacher2', 'reset99')).status).toBe(
         200,
       );
+    });
+
+    it('필수 항목(사번·연락처)이 없거나 형식이 틀리면 400, 사번 중복은 409', async () => {
+      const base = { loginId: 'teacher7', name: 'x', password: 'pw3333' };
+      await api()
+        .post('/api/instructors')
+        .set(bearer(instructor))
+        .send(base)
+        .expect(400);
+      await api()
+        .post('/api/instructors')
+        .set(bearer(instructor))
+        .send({ ...base, employeeNo: 'T-007', phone: '123' })
+        .expect(400);
+      await api()
+        .post('/api/instructors')
+        .set(bearer(instructor))
+        .send({
+          ...base,
+          employeeNo: 'T-007',
+          phone: '010-1111-2222',
+          position: 'KING',
+        })
+        .expect(400);
+      const dup = await api()
+        .post('/api/instructors')
+        .set(bearer(instructor))
+        .send({ ...base, employeeNo: 'T-002', phone: '010-1111-2222' });
+      expect(dup.status).toBe(409);
+      expect(dup.body.code).toBe('INSTRUCTOR_EMPLOYEE_NO_DUPLICATED');
+    });
+
+    it('휴직한 강사는 로그인할 수 있고, 퇴직한 강사는 로그인할 수 없으며 받은 토큰도 거부된다', async () => {
+      const token = await tokenOf('INSTRUCTOR', 'teacher2', 'reset99');
+      await api()
+        .patch(`/api/instructors/${teacherId}`)
+        .set(bearer(instructor))
+        .send({ status: 'ON_LEAVE' })
+        .expect(200);
+      expect((await login('INSTRUCTOR', 'teacher2', 'reset99')).status).toBe(
+        200,
+      );
+
+      await api()
+        .patch(`/api/instructors/${teacherId}`)
+        .set(bearer(instructor))
+        .send({ status: 'RESIGNED' })
+        .expect(200);
+      expect((await login('INSTRUCTOR', 'teacher2', 'reset99')).status).toBe(
+        401,
+      );
+      await api().get('/api/auth/me').set(bearer(token)).expect(401);
+
+      // 퇴직 처리한 강사도 목록에는 남고, 다시 재직으로 돌리면 로그인할 수 있다
+      const list = await api()
+        .get('/api/instructors')
+        .set(bearer(instructor))
+        .expect(200);
+      expect(
+        list.body.data.find((i: { id: number }) => i.id === teacherId).status,
+      ).toBe('RESIGNED');
+      await api()
+        .patch(`/api/instructors/${teacherId}`)
+        .set(bearer(instructor))
+        .send({ status: 'ACTIVE' })
+        .expect(200);
+      expect((await login('INSTRUCTOR', 'teacher2', 'reset99')).status).toBe(
+        200,
+      );
+    });
+
+    it('자기 자신은 퇴직 처리할 수 없다(409)', async () => {
+      const me = await api()
+        .get('/api/auth/me')
+        .set(bearer(instructor))
+        .expect(200);
+      const res = await api()
+        .patch(`/api/instructors/${me.body.data.id}`)
+        .set(bearer(instructor))
+        .send({ status: 'RESIGNED' });
+      expect(res.status).toBe(409);
+      expect(res.body.code).toBe('CANNOT_RESIGN_SELF');
     });
 
     it('자기 자신은 삭제할 수 없다(409)', async () => {

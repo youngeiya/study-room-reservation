@@ -37,8 +37,9 @@ export class InstructorController {
   update(
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: UpdateInstructorDto,
+    @CurrentUser() user: AuthUser,
   ): Promise<InstructorView> {
-    return this.instructorService.update(id, dto);
+    return this.instructorService.update(id, dto, user.id);
   }
 
   /** 강사 삭제 (Soft Delete). 자기 자신은 삭제할 수 없다. */

@@ -48,7 +48,8 @@ COMMENT ON COLUMN student.status         IS '재원 상태: ENROLLED 재원 / ON
 COMMENT ON COLUMN student.deleted_at     IS 'Soft Delete (NULL = 삭제되지 않음)';
 
 -- ---------------------------------------------------------------------
--- 강사 (로그인 계정). 삭제되지 않은 강사끼리 로그인 아이디는 중복 불가 (Soft Delete).
+-- 강사 (로그인 계정 + 인사·담당 정보). Soft Delete.
+--   삭제되지 않은 강사끼리 로그인 아이디·사번은 중복 불가. 퇴직(RESIGNED)한 강사는 로그인할 수 없다.
 -- ---------------------------------------------------------------------
 CREATE TABLE instructor (
   id             NUMBER GENERATED ALWAYS AS IDENTITY,
@@ -56,15 +57,34 @@ CREATE TABLE instructor (
   login_id       VARCHAR2(50)                 NOT NULL,
   password_hash  VARCHAR2(200)                NOT NULL,
   name           VARCHAR2(30 CHAR)            NOT NULL,
+  employee_no    VARCHAR2(20),
+  phone          VARCHAR2(20),
+  email          VARCHAR2(100),
+  job_title      VARCHAR2(20)       DEFAULT 'LECTURER' NOT NULL,
+  subjects       VARCHAR2(100),
+  status         VARCHAR2(10)       DEFAULT 'ACTIVE'   NOT NULL,
+  hire_date      VARCHAR2(10),
+  memo           VARCHAR2(200 CHAR),
   created_at     TIMESTAMP(3)       DEFAULT SYS_EXTRACT_UTC(SYSTIMESTAMP) NOT NULL,
   updated_at     TIMESTAMP(3)       DEFAULT SYS_EXTRACT_UTC(SYSTIMESTAMP) NOT NULL,
   deleted_at     TIMESTAMP(3),
-  CONSTRAINT pk_instructor PRIMARY KEY (id)
+  CONSTRAINT pk_instructor PRIMARY KEY (id),
+  CONSTRAINT ck_instructor_title CHECK (job_title IN ('DIRECTOR', 'VICE_DIRECTOR', 'HOMEROOM', 'LECTURER', 'ASSISTANT', 'STAFF')),
+  CONSTRAINT ck_instructor_status CHECK (status IN ('ACTIVE', 'ON_LEAVE', 'RESIGNED'))
 );
 
--- 삭제된 강사(deleted_at 이 있는 행)는 인덱스에 들어가지 않아서, 삭제된 강사의 아이디는 다시 쓸 수 있다.
+-- 삭제된 강사(deleted_at 이 있는 행)는 인덱스에 들어가지 않아서, 삭제된 강사의 아이디·사번은 다시 쓸 수 있다.
+-- 사번이 없는(NULL) 강사도 인덱스에 들어가지 않아 여러 명이어도 된다.
 CREATE UNIQUE INDEX uq_instructor_login_active
   ON instructor (CASE WHEN deleted_at IS NULL THEN login_id END);
+CREATE UNIQUE INDEX uq_instructor_employee_active
+  ON instructor (CASE WHEN deleted_at IS NULL THEN employee_no END);
+
+COMMENT ON COLUMN instructor.employee_no IS '사번(직원번호). 삭제되지 않은 강사끼리 중복 불가';
+COMMENT ON COLUMN instructor.job_title   IS '직책: DIRECTOR 원장 / VICE_DIRECTOR 부원장 / HOMEROOM 담임강사 / LECTURER 강사 / ASSISTANT 조교 / STAFF 행정·상담';
+COMMENT ON COLUMN instructor.subjects    IS '담당 과목(쉼표로 이은 코드): KOREAN, MATH, ENGLISH, SOCIAL, SCIENCE, KOREAN_HISTORY';
+COMMENT ON COLUMN instructor.status      IS '재직 상태: ACTIVE 재직 / ON_LEAVE 휴직 / RESIGNED 퇴직(로그인 불가)';
+COMMENT ON COLUMN instructor.hire_date   IS '입사일 (YYYY-MM-DD)';
 
 COMMENT ON TABLE instructor IS '강사 로그인 계정';
 

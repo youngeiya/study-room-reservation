@@ -2,6 +2,7 @@ import { Inject, Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { hashPassword } from '../auth/password';
 import { BusinessException } from '../common/business.exception';
 import { Clock } from '../common/clock.service';
+import { normalizeOptional } from '../common/normalize';
 import { Database } from '../storage/database';
 import type { Repository } from '../storage/repository';
 import { UniqueViolationError } from '../storage/unique-violation.error';
@@ -12,6 +13,7 @@ import {
   Instructor,
   InstructorView,
   isActiveInstructor,
+  joinSubjects,
   toInstructorView,
 } from './instructor.entity';
 
@@ -19,6 +21,12 @@ import {
 const DEFAULT_LOGIN_ID = 'admin';
 const DEFAULT_PASSWORD = 'admin1234';
 const DEFAULT_NAME = '원장';
+
+// 입사일이 형식(YYYY-MM-DD)뿐 아니라 실제로 있는 날짜인지 확인한다 (예: 2026-02-31 은 거부)
+function isRealDate(value: string): boolean {
+  const date = new Date(`${value}T00:00:00.000Z`);
+  return !Number.isNaN(date.getTime()) && date.toISOString().startsWith(value);
+}
 
 @Injectable()
 export class InstructorService implements OnModuleInit {
@@ -28,27 +36,46 @@ export class InstructorService implements OnModuleInit {
     private readonly db: Database,
     private readonly clock: Clock,
   ) {
-    // "삭제되지 않은 강사끼리 아이디는 유일" 제약을 저장소에 등록한다 (학생의 학번과 같은 방식).
-    // 서비스에서 먼저 확인해도 동시에 같은 아이디로 등록하는 두 요청은 막을 수 없어서 커밋 때 한 번 더 검사한다.
-    this.db.registerUnique(INSTRUCTOR_COLLECTION, 'loginId', (row) =>
-      isActiveInstructor(row as Instructor),
-    );
+    // "삭제되지 않은 강사끼리 아이디·사번은 유일" 제약을 저장소에 등록한다 (학생의 학번과 같은 방식).
+    // 서비스에서 먼저 확인해도 동시에 같은 값으로 등록하는 두 요청은 막을 수 없어서 커밋 때 한 번 더 검사한다.
+    for (const field of ['loginId', 'employeeNo']) {
+      this.db.registerUnique(INSTRUCTOR_COLLECTION, field, (row) =>
+        isActiveInstructor(row as Instructor),
+      );
+    }
   }
 
   /**
-   * 강사 계정이 하나도 없으면 기본 강사 계정을 만든다 (로그인이 있으므로 처음에 들어갈 계정이 필요하다).
-   * 이미 있는 계정 중 삭제 표시(deletedAt)가 없는 이전 데이터는 null 로 채운다.
+   * 강사 계정이 하나도 없으면 기본 강사 계정(원장)을 만든다 (로그인이 있으므로 처음에 들어갈 계정이 필요하다).
+   * 이미 있는 계정 중 새 필드(재직 상태 등)가 없는 이전 데이터는 기본값으로 채운다.
    */
   async onModuleInit() {
     const all = await this.instructors.findAll();
     if (all.length > 0) {
-      const targets = all.filter(
-        (i) => (i as Partial<Instructor>).deletedAt === undefined,
-      );
+      const targets = all.filter((i) => {
+        const p = i as Partial<Instructor>;
+        return (
+          p.deletedAt === undefined ||
+          p.status === undefined ||
+          p.position === undefined ||
+          p.employeeNo === undefined
+        );
+      });
       if (targets.length > 0) {
         await this.db.transaction(async () => {
           for (const i of targets) {
-            await this.instructors.update({ ...i, deletedAt: null });
+            await this.instructors.update({
+              ...i,
+              employeeNo: i.employeeNo ?? null,
+              phone: i.phone ?? null,
+              email: i.email ?? null,
+              position: i.position ?? 'LECTURER',
+              subjects: i.subjects ?? null,
+              status: i.status ?? 'ACTIVE',
+              hireDate: i.hireDate ?? null,
+              memo: i.memo ?? null,
+              deletedAt: i.deletedAt ?? null,
+            });
           }
         });
       }
@@ -64,6 +91,14 @@ export class InstructorService implements OnModuleInit {
         loginId,
         passwordHash,
         name: DEFAULT_NAME,
+        employeeNo: null,
+        phone: null,
+        email: null,
+        position: 'DIRECTOR',
+        subjects: null,
+        status: 'ACTIVE',
+        hireDate: null,
+        memo: null,
         createdAt: now,
         updatedAt: now,
         deletedAt: null,
@@ -74,24 +109,38 @@ export class InstructorService implements OnModuleInit {
     );
   }
 
-  /** 강사 목록 (삭제된 강사는 제외). 비밀번호 해시는 내려보내지 않는다. */
+  /** 강사 목록 (삭제된 강사는 제외, 퇴직한 강사는 포함). 비밀번호 해시는 내려보내지 않는다. */
   async findAll(): Promise<InstructorView[]> {
     const list = await this.instructors.findAll(isActiveInstructor);
     return list.map(toInstructorView);
   }
 
-  /** 강사 등록 */
+  /** 강사 등록. 새 강사는 항상 재직(ACTIVE) 상태로 시작한다. */
   async create(dto: CreateInstructorDto): Promise<InstructorView> {
     const loginId = dto.loginId.trim();
+    const employeeNo = dto.employeeNo.trim();
+    const hireDate = normalizeOptional(dto.hireDate) ?? null;
+    if (hireDate !== null && !isRealDate(hireDate)) {
+      throw new BusinessException('INVALID_HIRE_DATE');
+    }
     const passwordHash = await hashPassword(dto.password); // 느린 계산은 트랜잭션 밖에서
     const now = this.clock.now().toISOString();
     const created = await this.guardUnique(() =>
       this.db.transaction(async () => {
         await this.assertLoginIdFree(loginId);
+        await this.assertEmployeeNoFree(employeeNo);
         return this.instructors.create({
           loginId,
           passwordHash,
           name: dto.name.trim(),
+          employeeNo,
+          phone: dto.phone,
+          email: normalizeOptional(dto.email) ?? null,
+          position: dto.position ?? 'LECTURER',
+          subjects: joinSubjects(dto.subjects),
+          status: 'ACTIVE',
+          hireDate,
+          memo: normalizeOptional(dto.memo) ?? null,
           createdAt: now,
           updatedAt: now,
           deletedAt: null,
@@ -101,22 +150,62 @@ export class InstructorService implements OnModuleInit {
     return toInstructorView(created);
   }
 
-  /** 강사 수정: 보낸 필드만 바꾼다. password 를 보내면 비밀번호를 재설정한다. */
-  async update(id: number, dto: UpdateInstructorDto): Promise<InstructorView> {
+  /**
+   * 강사 수정: 보낸 필드만 바꾼다. password 를 보내면 비밀번호를 재설정한다.
+   * 자기 자신을 퇴직으로 바꿀 수는 없다 (아무도 로그인하지 못하는 상황 방지).
+   * 다른 강사를 퇴직 처리할 때는 요청한 강사(actor)의 행도 "건드려서" 서로를 동시에 퇴직시키는 경우를 막는다
+   * (삭제와 같은 이유, remove 참고).
+   */
+  async update(
+    id: number,
+    dto: UpdateInstructorDto,
+    actorId: number,
+  ): Promise<InstructorView> {
+    if (dto.status === 'RESIGNED' && id === actorId) {
+      throw new BusinessException('CANNOT_RESIGN_SELF');
+    }
+    const hireDate = normalizeOptional(dto.hireDate);
+    if (typeof hireDate === 'string' && !isRealDate(hireDate)) {
+      throw new BusinessException('INVALID_HIRE_DATE');
+    }
     const passwordHash =
       dto.password !== undefined ? await hashPassword(dto.password) : undefined;
+
     const updated = await this.guardUnique(() =>
       this.db.transaction(async () => {
         const instructor = await this.getActiveOrThrow(id);
+
         const loginId = dto.loginId?.trim();
         if (loginId !== undefined && loginId !== instructor.loginId) {
           await this.assertLoginIdFree(loginId, id);
         }
+        const employeeNo = dto.employeeNo?.trim();
+        if (employeeNo !== undefined && employeeNo !== instructor.employeeNo) {
+          await this.assertEmployeeNoFree(employeeNo, id);
+        }
+        if (dto.status === 'RESIGNED' && instructor.status !== 'RESIGNED') {
+          await this.touchActor(actorId);
+        }
+
+        const email = normalizeOptional(dto.email);
+        const memo = normalizeOptional(dto.memo);
         return this.instructors.update({
           ...instructor,
           loginId: loginId ?? instructor.loginId,
-          name: dto.name?.trim() ?? instructor.name,
           passwordHash: passwordHash ?? instructor.passwordHash,
+          name: dto.name?.trim() ?? instructor.name,
+          employeeNo: employeeNo ?? instructor.employeeNo ?? null,
+          phone: dto.phone ?? instructor.phone ?? null,
+          email: email === undefined ? (instructor.email ?? null) : email,
+          position: dto.position ?? instructor.position ?? 'LECTURER',
+          subjects:
+            dto.subjects === undefined
+              ? (instructor.subjects ?? null)
+              : joinSubjects(dto.subjects),
+          status: dto.status ?? instructor.status ?? 'ACTIVE',
+          hireDate:
+            hireDate === undefined ? (instructor.hireDate ?? null) : hireDate,
+          memo: memo === undefined ? (instructor.memo ?? null) : memo,
           updatedAt: this.clock.now().toISOString(),
         });
       }),
@@ -136,10 +225,7 @@ export class InstructorService implements OnModuleInit {
       throw new BusinessException('CANNOT_DELETE_SELF');
     }
     await this.db.transaction(async () => {
-      const actor = await this.instructors.findById(actorId);
-      if (!actor || !isActiveInstructor(actor)) {
-        throw new BusinessException('UNAUTHORIZED');
-      }
+      await this.touchActor(actorId);
       const target = await this.getActiveOrThrow(id);
       const now = this.clock.now().toISOString();
       await this.instructors.update({
@@ -147,8 +233,20 @@ export class InstructorService implements OnModuleInit {
         deletedAt: now,
         updatedAt: now,
       });
-      await this.instructors.update(actor);
     });
+  }
+
+  // 요청한 강사가 지금도 유효한지(삭제·퇴직되지 않았는지) 확인하고, 행을 갱신해서 version 을 올린다
+  private async touchActor(actorId: number) {
+    const actor = await this.instructors.findById(actorId);
+    if (
+      !actor ||
+      !isActiveInstructor(actor) ||
+      (actor.status ?? 'ACTIVE') === 'RESIGNED'
+    ) {
+      throw new BusinessException('UNAUTHORIZED');
+    }
+    await this.instructors.update(actor);
   }
 
   // 수정·삭제는 "삭제되지 않은 강사"에게만 가능하다 (없거나 이미 삭제되었으면 404)
@@ -171,13 +269,31 @@ export class InstructorService implements OnModuleInit {
     }
   }
 
-  // 저장소의 유니크 제약 위반(동시에 같은 아이디로 등록)을 업무 오류로 바꾼다
+  // 사번도 삭제되지 않은 강사끼리 유일하다
+  private async assertEmployeeNoFree(employeeNo: string, exceptId?: number) {
+    const same = await this.instructors.findAll(
+      (i) =>
+        isActiveInstructor(i) &&
+        i.employeeNo === employeeNo &&
+        i.id !== exceptId,
+    );
+    if (same.length > 0) {
+      throw new BusinessException('INSTRUCTOR_EMPLOYEE_NO_DUPLICATED');
+    }
+  }
+
+  // 저장소의 유니크 제약 위반(동시에 같은 값으로 등록)을 업무 오류로 바꾼다
   private async guardUnique<T>(work: () => Promise<T>): Promise<T> {
     try {
       return await work();
     } catch (error) {
-      if (error instanceof UniqueViolationError && error.field === 'loginId') {
-        throw new BusinessException('INSTRUCTOR_LOGIN_ID_DUPLICATED');
+      if (error instanceof UniqueViolationError) {
+        if (error.field === 'loginId') {
+          throw new BusinessException('INSTRUCTOR_LOGIN_ID_DUPLICATED');
+        }
+        if (error.field === 'employeeNo') {
+          throw new BusinessException('INSTRUCTOR_EMPLOYEE_NO_DUPLICATED');
+        }
       }
       throw error;
     }

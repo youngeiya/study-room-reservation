@@ -69,6 +69,18 @@ export const ErrorCode = {
     status: HttpStatus.CONFLICT,
     message: '이미 사용 중인 강사 아이디입니다.',
   },
+  INSTRUCTOR_EMPLOYEE_NO_DUPLICATED: {
+    status: HttpStatus.CONFLICT,
+    message: '이미 사용 중인 사번입니다.',
+  },
+  CANNOT_RESIGN_SELF: {
+    status: HttpStatus.CONFLICT,
+    message: '자기 자신의 계정은 퇴직 처리할 수 없습니다.',
+  },
+  INVALID_HIRE_DATE: {
+    status: HttpStatus.BAD_REQUEST,
+    message: '입사일이 올바른 날짜가 아닙니다.',
+  },
   CANNOT_DELETE_SELF: {
     status: HttpStatus.CONFLICT,
     message: '자기 자신의 계정은 삭제할 수 없습니다.',

@@ -2,6 +2,7 @@ import { Inject, Injectable, OnModuleInit } from '@nestjs/common';
 import { hashPassword } from '../auth/password';
 import { BusinessException } from '../common/business.exception';
 import { Clock } from '../common/clock.service';
+import { normalizeOptional } from '../common/normalize';
 import { Database } from '../storage/database';
 import type { Repository } from '../storage/repository';
 import { UniqueViolationError } from '../storage/unique-violation.error';
@@ -54,14 +55,6 @@ const SEED_STUDENTS = [
     guardianPhone: null,
   },
 ];
-
-// 선택 입력 정리: 안 보냈으면(undefined) 그대로 두고, 빈 문자열은 "없음(null)"으로, 문자열은 앞뒤 공백 제거
-function normalizeOptional(value: string | null | undefined) {
-  if (value === undefined) return undefined;
-  if (value === null) return null;
-  const trimmed = value.trim();
-  return trimmed === '' ? null : trimmed;
-}
 
 // @Injectable: Nest 의 DI 컨테이너가 관리하는 객체(Spring 의 @Service 에 해당)
 @Injectable()
