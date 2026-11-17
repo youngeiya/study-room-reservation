@@ -11,6 +11,9 @@ INSERT INTO student (name, phone, student_no, grade, guardian_phone) VALUES ('�
 INSERT INTO student (name, phone, student_no, grade, guardian_phone) VALUES ('최수아', '010-1111-0004', '2026004', '중3', '010-2222-0004');
 INSERT INTO student (name, phone, student_no, grade, guardian_phone) VALUES ('정도윤', '010-1111-0005', '2026005', 'N수', NULL);
 
+-- 강사(원장 계정과 예시 강사 6명)는 이 SQL로 넣지 않는다: 비밀번호 해시(scrypt)가 필요해서 앱이 시작할 때 만든다.
+--   (원장: INSTRUCTOR_ID/INSTRUCTOR_PASSWORD, 예시 강사 6명: 사번이 있는 강사가 없을 때 한 번, 초기 비밀번호는 사번)
+
 -- 운영 기간: 어제부터 30일 뒤까지 (UTC 기준)
 INSERT INTO study_room (name, max_personnel, start_date, end_date)
 VALUES ('부엉이 라이브러리 1관', 10, SYS_EXTRACT_UTC(SYSTIMESTAMP) - INTERVAL '1' DAY, SYS_EXTRACT_UTC(SYSTIMESTAMP) + INTERVAL '30' DAY);

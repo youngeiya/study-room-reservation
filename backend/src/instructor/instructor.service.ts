@@ -22,6 +22,82 @@ const DEFAULT_LOGIN_ID = 'admin';
 const DEFAULT_PASSWORD = 'admin1234';
 const DEFAULT_NAME = '원장';
 
+// 처음 실행할 때 넣어 둘 예시 강사 (직책·담당 과목·재직 상태가 골고루 보이도록). 초기 비밀번호는 사번과 같다.
+const SEED_INSTRUCTORS = [
+  {
+    loginId: 'kim.math',
+    name: '김수학',
+    employeeNo: 'T-001',
+    phone: '010-2000-0001',
+    email: 'kim.math@owl.example.com',
+    position: 'HOMEROOM',
+    subjects: ['MATH'],
+    status: 'ACTIVE',
+    hireDate: '2021-03-02',
+    memo: '수학 담임. 월·수·금 오후 상담',
+  },
+  {
+    loginId: 'lee.kor',
+    name: '이국어',
+    employeeNo: 'T-002',
+    phone: '010-2000-0002',
+    email: 'lee.kor@owl.example.com',
+    position: 'LECTURER',
+    subjects: ['KOREAN', 'KOREAN_HISTORY'],
+    status: 'ACTIVE',
+    hireDate: '2023-09-01',
+    memo: null,
+  },
+  {
+    loginId: 'park.eng',
+    name: '박영어',
+    employeeNo: 'T-003',
+    phone: '010-2000-0003',
+    email: null,
+    position: 'LECTURER',
+    subjects: ['ENGLISH'],
+    status: 'ACTIVE',
+    hireDate: '2022-03-15',
+    memo: null,
+  },
+  {
+    loginId: 'jung.sci',
+    name: '정탐구',
+    employeeNo: 'T-004',
+    phone: '010-2000-0004',
+    email: 'jung.sci@owl.example.com',
+    position: 'LECTURER',
+    subjects: ['SCIENCE', 'SOCIAL'],
+    status: 'ON_LEAVE',
+    hireDate: '2024-03-04',
+    memo: '휴직 중 (이번 학기 복귀 예정)',
+  },
+  {
+    loginId: 'choi.ta',
+    name: '최조교',
+    employeeNo: 'T-005',
+    phone: '010-2000-0005',
+    email: null,
+    position: 'ASSISTANT',
+    subjects: [],
+    status: 'ACTIVE',
+    hireDate: '2025-02-10',
+    memo: null,
+  },
+  {
+    loginId: 'han.staff',
+    name: '한상담',
+    employeeNo: 'T-006',
+    phone: '010-2000-0006',
+    email: 'han.staff@owl.example.com',
+    position: 'STAFF',
+    subjects: [],
+    status: 'RESIGNED',
+    hireDate: '2020-01-06',
+    memo: '퇴직 (퇴직 처리 예시: 로그인할 수 없음)',
+  },
+] as const;
+
 // 입사일이 형식(YYYY-MM-DD)뿐 아니라 실제로 있는 날짜인지 확인한다 (예: 2026-02-31 은 거부)
 function isRealDate(value: string): boolean {
   const date = new Date(`${value}T00:00:00.000Z`);
@@ -45,11 +121,49 @@ export class InstructorService implements OnModuleInit {
     }
   }
 
+  /** 앱이 뜰 때: 기본 강사 계정(원장)을 보장하고, 처음 한 번만 예시 강사를 넣는다. */
+  async onModuleInit() {
+    await this.ensureDefaultAccount();
+    await this.seedSamples();
+  }
+
+  /**
+   * 예시 강사를 넣는다 (학생·자습실 시드와 같은 목적: 처음 실행해도 화면이 비어 보이지 않게).
+   * "사번이 있는 강사가 한 명도 없을 때"(삭제된 강사 포함)만 넣으므로, 직접 등록했거나 예시를 지운 뒤에는
+   * 재시작해도 다시 생기지 않는다. 예시 강사의 초기 비밀번호는 사번과 같다.
+   * 환경 변수 SEED_SAMPLE_INSTRUCTORS=false 로 끌 수 있다 (테스트·실서비스용).
+   */
+  private async seedSamples() {
+    if (process.env.SEED_SAMPLE_INSTRUCTORS === 'false') return;
+    const all = await this.instructors.findAll();
+    if (all.some((i) => (i.employeeNo ?? null) !== null)) return;
+
+    // 해시 계산은 느려서(일부러) 트랜잭션 밖에서 미리 한다
+    const seeds = await Promise.all(
+      SEED_INSTRUCTORS.map(async (seed) => ({
+        ...seed,
+        passwordHash: await hashPassword(seed.employeeNo),
+      })),
+    );
+    const now = this.clock.now().toISOString();
+    await this.db.transaction(async () => {
+      for (const { subjects, ...seed } of seeds) {
+        await this.instructors.create({
+          ...seed,
+          subjects: joinSubjects(subjects),
+          createdAt: now,
+          updatedAt: now,
+          deletedAt: null,
+        });
+      }
+    });
+  }
+
   /**
    * 강사 계정이 하나도 없으면 기본 강사 계정(원장)을 만든다 (로그인이 있으므로 처음에 들어갈 계정이 필요하다).
    * 이미 있는 계정 중 새 필드(재직 상태 등)가 없는 이전 데이터는 기본값으로 채운다.
    */
-  async onModuleInit() {
+  private async ensureDefaultAccount() {
     const all = await this.instructors.findAll();
     if (all.length > 0) {
       const targets = all.filter((i) => {

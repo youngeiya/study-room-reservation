@@ -22,6 +22,8 @@ describe('InstructorService', () => {
   beforeEach(async () => {
     delete process.env.INSTRUCTOR_ID;
     delete process.env.INSTRUCTOR_PASSWORD;
+    // 다른 테스트의 개수 계산이 예시 강사에 영향받지 않게 끈다 (예시 강사는 아래 '예시 강사' 테스트에서 따로 확인)
+    process.env.SEED_SAMPLE_INSTRUCTORS = 'false';
     dir = await mkdtemp(join(tmpdir(), 'instructor-'));
     db = new JsonDatabase(join(dir, 'db.json'));
     await db.init();
@@ -33,7 +35,10 @@ describe('InstructorService', () => {
     seq = 0;
   });
 
-  afterEach(() => rm(dir, { recursive: true, force: true }));
+  afterEach(async () => {
+    delete process.env.SEED_SAMPLE_INSTRUCTORS;
+    await rm(dir, { recursive: true, force: true });
+  });
 
   // 매번 다른 아이디·사번을 쓰는 등록 입력 (필요한 값만 덮어쓴다)
   const dto = (
@@ -322,6 +327,69 @@ describe('InstructorService', () => {
         service.remove(adminId, t.id), // t 가 admin 을 삭제
       ]);
       expect(results.filter((r) => r.status === 'fulfilled')).toHaveLength(1);
+      expect(await service.findAll()).toHaveLength(1);
+    });
+  });
+
+  describe('예시 강사', () => {
+    // beforeEach 에서 꺼 둔 시드를 켜고 다시 시작한 것처럼 만든다
+    const restart = async (enabled = true) => {
+      if (enabled) delete process.env.SEED_SAMPLE_INSTRUCTORS;
+      else process.env.SEED_SAMPLE_INSTRUCTORS = 'false';
+      await service.onModuleInit();
+    };
+
+    it('사번이 있는 강사가 없으면 예시 강사 6명이 들어가고, 직책·상태가 골고루 있다', async () => {
+      await restart();
+      const list = await service.findAll();
+      expect(list).toHaveLength(7); // 원장 + 예시 6명
+      expect(list.filter((i) => i.employeeNo)).toHaveLength(6);
+      expect(new Set(list.map((i) => i.status))).toEqual(
+        new Set(['ACTIVE', 'ON_LEAVE', 'RESIGNED']),
+      );
+      expect(list.find((i) => i.loginId === 'kim.math')).toMatchObject({
+        name: '김수학',
+        employeeNo: 'T-001',
+        position: 'HOMEROOM',
+        subjects: ['MATH'],
+      });
+      expect(list.find((i) => i.loginId === 'lee.kor')!.subjects).toEqual([
+        'KOREAN',
+        'KOREAN_HISTORY',
+      ]);
+    });
+
+    it('예시 강사의 초기 비밀번호는 사번과 같다', async () => {
+      await restart();
+      const stored = (await repo.findAll()).find(
+        (i) => i.loginId === 'kim.math',
+      )!;
+      expect(await verifyPassword('T-001', stored.passwordHash)).toBe(true);
+    });
+
+    it('다시 시작해도 중복으로 들어가지 않고, 예시를 모두 지운 뒤에도 다시 생기지 않는다', async () => {
+      await restart();
+      await restart();
+      const list = await service.findAll();
+      expect(list).toHaveLength(7);
+
+      for (const i of list.filter((x) => x.employeeNo)) {
+        await service.remove(i.id, adminId);
+      }
+      await restart();
+      expect((await service.findAll()).map((i) => i.loginId)).toEqual([
+        'admin',
+      ]);
+    });
+
+    it('이미 직접 등록한 강사(사번 있음)가 있으면 예시를 넣지 않는다', async () => {
+      await service.create(dto());
+      await restart();
+      expect(await service.findAll()).toHaveLength(2); // 원장 + 직접 등록한 강사
+    });
+
+    it('SEED_SAMPLE_INSTRUCTORS=false 이면 넣지 않는다', async () => {
+      await restart(false);
       expect(await service.findAll()).toHaveLength(1);
     });
   });

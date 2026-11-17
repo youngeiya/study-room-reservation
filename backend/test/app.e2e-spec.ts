@@ -485,7 +485,7 @@ describe('로그인과 권한 (e2e)', () => {
           loginId: 'teacher2',
           name: '박강사',
           password: 'pw2222',
-          employeeNo: 'T-002',
+          employeeNo: 'E2E-2',
           phone: '010-2222-3333',
           email: 'park@example.com',
           position: 'HOMEROOM',
@@ -495,7 +495,7 @@ describe('로그인과 권한 (e2e)', () => {
         .expect(201);
       teacherId = created.body.data.id;
       expect(created.body.data).toMatchObject({
-        employeeNo: 'T-002',
+        employeeNo: 'E2E-2',
         position: 'HOMEROOM',
         subjects: ['KOREAN', 'MATH'],
         status: 'ACTIVE',
@@ -524,7 +524,7 @@ describe('로그인과 권한 (e2e)', () => {
           loginId: 'teacher2',
           name: '또',
           password: 'pw3333',
-          employeeNo: 'T-003',
+          employeeNo: 'E2E-3',
           phone: '010-3333-4444',
         });
       expect(dup.status).toBe(409);
@@ -539,7 +539,7 @@ describe('로그인과 권한 (e2e)', () => {
           loginId: '한글',
           name: 'x',
           password: 'pw3333',
-          employeeNo: 'T-004',
+          employeeNo: 'E2E-4',
           phone: '010-3333-4444',
         })
         .expect(400);
@@ -550,7 +550,7 @@ describe('로그인과 권한 (e2e)', () => {
           loginId: 'teacher9',
           name: 'x',
           password: 'abc',
-          employeeNo: 'T-009',
+          employeeNo: 'E2E-9',
           phone: '010-3333-4444',
         })
         .expect(400);
@@ -580,14 +580,14 @@ describe('로그인과 권한 (e2e)', () => {
       await api()
         .post('/api/instructors')
         .set(bearer(instructor))
-        .send({ ...base, employeeNo: 'T-007', phone: '123' })
+        .send({ ...base, employeeNo: 'E2E-7', phone: '123' })
         .expect(400);
       await api()
         .post('/api/instructors')
         .set(bearer(instructor))
         .send({
           ...base,
-          employeeNo: 'T-007',
+          employeeNo: 'E2E-7',
           phone: '010-1111-2222',
           position: 'KING',
         })
@@ -595,7 +595,7 @@ describe('로그인과 권한 (e2e)', () => {
       const dup = await api()
         .post('/api/instructors')
         .set(bearer(instructor))
-        .send({ ...base, employeeNo: 'T-002', phone: '010-1111-2222' });
+        .send({ ...base, employeeNo: 'E2E-2', phone: '010-1111-2222' });
       expect(dup.status).toBe(409);
       expect(dup.body.code).toBe('INSTRUCTOR_EMPLOYEE_NO_DUPLICATED');
     });
