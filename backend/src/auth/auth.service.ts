@@ -4,6 +4,7 @@ import { Clock } from '../common/clock.service';
 import {
   INSTRUCTOR_REPOSITORY,
   Instructor,
+  isActiveInstructor,
 } from '../instructor/instructor.entity';
 import { Database } from '../storage/database';
 import type { Repository } from '../storage/repository';
@@ -105,7 +106,7 @@ export class AuthService {
   private async findAccount(role: Role, loginId: string) {
     if (role === 'INSTRUCTOR') {
       const [row] = await this.instructors.findAll(
-        (i) => i.loginId === loginId,
+        (i) => isActiveInstructor(i) && i.loginId === loginId,
       );
       return row ? this.fromInstructor(row) : null;
     }
@@ -124,7 +125,9 @@ export class AuthService {
     return row ? this.fromStudent(row) : null;
   }
 
+  // 삭제된 강사는 로그인할 수 없고, 이미 로그인한 토큰도 /auth/me 에서 거부된다
   private fromInstructor(row: Instructor) {
+    if (!isActiveInstructor(row)) return null;
     return {
       passwordHash: row.passwordHash as string | null,
       user: {

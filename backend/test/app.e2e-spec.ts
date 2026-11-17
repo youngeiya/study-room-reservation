@@ -469,4 +469,102 @@ describe('로그인과 권한 (e2e)', () => {
       expect(res.body.code).toBe('IMAGE_NOT_FOUND');
     });
   });
+
+  describe('강사 관리', () => {
+    let teacherId: number;
+
+    it('학생은 강사 목록을 볼 수 없다(403)', async () => {
+      await api().get('/api/instructors').set(bearer(student1)).expect(403);
+    });
+
+    it('강사는 강사를 등록하고, 목록에는 비밀번호 해시가 없다', async () => {
+      const created = await api()
+        .post('/api/instructors')
+        .set(bearer(instructor))
+        .send({ loginId: 'teacher2', name: '박강사', password: 'pw2222' })
+        .expect(201);
+      teacherId = created.body.data.id;
+      expect(JSON.stringify(created.body)).not.toMatch(/passwordHash/);
+
+      const list = await api()
+        .get('/api/instructors')
+        .set(bearer(instructor))
+        .expect(200);
+      expect(list.body.data.map((i: { loginId: string }) => i.loginId)).toEqual(
+        expect.arrayContaining(['admin', 'teacher2']),
+      );
+      expect(JSON.stringify(list.body)).not.toMatch(/passwordHash/);
+    });
+
+    it('새 강사는 자기 아이디와 비밀번호로 로그인할 수 있고, 아이디 중복은 409', async () => {
+      expect((await login('INSTRUCTOR', 'teacher2', 'pw2222')).status).toBe(
+        200,
+      );
+      const dup = await api()
+        .post('/api/instructors')
+        .set(bearer(instructor))
+        .send({ loginId: 'teacher2', name: '또', password: 'pw3333' });
+      expect(dup.status).toBe(409);
+      expect(dup.body.code).toBe('INSTRUCTOR_LOGIN_ID_DUPLICATED');
+    });
+
+    it('형식이 틀린 아이디·짧은 비밀번호는 400', async () => {
+      await api()
+        .post('/api/instructors')
+        .set(bearer(instructor))
+        .send({ loginId: '한글', name: 'x', password: 'pw3333' })
+        .expect(400);
+      await api()
+        .post('/api/instructors')
+        .set(bearer(instructor))
+        .send({ loginId: 'teacher9', name: 'x', password: 'abc' })
+        .expect(400);
+    });
+
+    it('비밀번호를 재설정하면 옛 비밀번호는 로그인되지 않는다', async () => {
+      await api()
+        .patch(`/api/instructors/${teacherId}`)
+        .set(bearer(instructor))
+        .send({ password: 'reset99' })
+        .expect(200);
+      expect((await login('INSTRUCTOR', 'teacher2', 'pw2222')).status).toBe(
+        401,
+      );
+      expect((await login('INSTRUCTOR', 'teacher2', 'reset99')).status).toBe(
+        200,
+      );
+    });
+
+    it('자기 자신은 삭제할 수 없다(409)', async () => {
+      const me = await api()
+        .get('/api/auth/me')
+        .set(bearer(instructor))
+        .expect(200);
+      const res = await api()
+        .delete(`/api/instructors/${me.body.data.id}`)
+        .set(bearer(instructor));
+      expect(res.status).toBe(409);
+      expect(res.body.code).toBe('CANNOT_DELETE_SELF');
+    });
+
+    it('삭제된 강사는 로그인할 수 없고, 이미 받은 토큰도 거부된다', async () => {
+      const token = await tokenOf('INSTRUCTOR', 'teacher2', 'reset99');
+      await api()
+        .delete(`/api/instructors/${teacherId}`)
+        .set(bearer(instructor))
+        .expect(200);
+
+      expect((await login('INSTRUCTOR', 'teacher2', 'reset99')).status).toBe(
+        401,
+      );
+      await api().get('/api/auth/me').set(bearer(token)).expect(401);
+      const list = await api()
+        .get('/api/instructors')
+        .set(bearer(instructor))
+        .expect(200);
+      expect(
+        list.body.data.map((i: { loginId: string }) => i.loginId),
+      ).not.toContain('teacher2');
+    });
+  });
 });

@@ -5,9 +5,11 @@ import {
   INSTRUCTOR_REPOSITORY,
   Instructor,
 } from './instructor.entity';
+import { InstructorController } from './instructor.controller';
 import { InstructorService } from './instructor.service';
 
 @Module({
+  controllers: [InstructorController],
   providers: [
     InstructorService,
     {

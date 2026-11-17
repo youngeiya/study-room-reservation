@@ -48,7 +48,7 @@ COMMENT ON COLUMN student.status         IS '재원 상태: ENROLLED 재원 / ON
 COMMENT ON COLUMN student.deleted_at     IS 'Soft Delete (NULL = 삭제되지 않음)';
 
 -- ---------------------------------------------------------------------
--- 강사 (로그인 계정). 로그인 아이디는 중복 불가.
+-- 강사 (로그인 계정). 삭제되지 않은 강사끼리 로그인 아이디는 중복 불가 (Soft Delete).
 -- ---------------------------------------------------------------------
 CREATE TABLE instructor (
   id             NUMBER GENERATED ALWAYS AS IDENTITY,
@@ -58,9 +58,13 @@ CREATE TABLE instructor (
   name           VARCHAR2(30 CHAR)            NOT NULL,
   created_at     TIMESTAMP(3)       DEFAULT SYS_EXTRACT_UTC(SYSTIMESTAMP) NOT NULL,
   updated_at     TIMESTAMP(3)       DEFAULT SYS_EXTRACT_UTC(SYSTIMESTAMP) NOT NULL,
-  CONSTRAINT pk_instructor PRIMARY KEY (id),
-  CONSTRAINT uq_instructor_login_id UNIQUE (login_id)
+  deleted_at     TIMESTAMP(3),
+  CONSTRAINT pk_instructor PRIMARY KEY (id)
 );
+
+-- 삭제된 강사(deleted_at 이 있는 행)는 인덱스에 들어가지 않아서, 삭제된 강사의 아이디는 다시 쓸 수 있다.
+CREATE UNIQUE INDEX uq_instructor_login_active
+  ON instructor (CASE WHEN deleted_at IS NULL THEN login_id END);
 
 COMMENT ON TABLE instructor IS '강사 로그인 계정';
 

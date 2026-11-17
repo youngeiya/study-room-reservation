@@ -75,8 +75,9 @@ const TABLES: TableSpec[] = [
       s('name', 'name'),
       t('createdAt', 'created_at'),
       t('updatedAt', 'updated_at'),
+      t('deletedAt', 'deleted_at'),
     ],
-    uniques: {},
+    uniques: { UQ_INSTRUCTOR_LOGIN_ACTIVE: 'loginId' },
   },
   {
     collection: 'studyRooms',
