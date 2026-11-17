@@ -5,11 +5,11 @@ import { useDisplay } from 'vuetify'
 import { mdiChevronDown, mdiLock, mdiLogout, mdiMenu } from '@mdi/js'
 import BrandLogo from '@/components/BrandLogo.vue'
 import PasswordDialog from '@/components/PasswordDialog.vue'
-import RaehausPanel from '@/components/RaehausPanel.vue'
+import TodayStatusPanel from '@/components/TodayStatusPanel.vue'
 import { useSessionStore } from '@/stores/session'
 
 /**
- * 로그인한 뒤의 공통 틀: 상단 헤더(로고·이름·사용자 메뉴), 왼쪽 사이드바(메뉴·래하우스 현황·내 정보), 본문.
+ * 로그인한 뒤의 공통 틀: 상단 헤더(로고·이름·사용자 메뉴), 왼쪽 사이드바(메뉴·오늘의 현황·내 정보), 본문.
  * 강사 화면과 학생 화면이 각자 제목·메뉴를 넘겨서 "서로 다른 화면"으로 보이게 한다.
  * 넓은 화면에서는 사이드바가 항상 보이고, 좁은 화면(모바일)에서는 햄버거 버튼으로 열고 닫는다.
  */
@@ -90,7 +90,7 @@ function logout() {
       />
     </v-list>
 
-    <RaehausPanel />
+    <TodayStatusPanel />
 
     <template #append>
       <div class="side-user">

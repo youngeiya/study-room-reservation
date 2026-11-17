@@ -1,11 +1,11 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
-import { mdiHomeVariantOutline, mdiRefresh } from '@mdi/js'
+import { mdiChartBox, mdiRefresh } from '@mdi/js'
 import { api } from '@/api'
 import type { StudyRoom } from '@/api/types'
 import { occupancyColor, occupancyPercent } from '@/utils/room'
 
-// 사이드바의 "래하우스" 패널: 자습실별 신청 현황을 한눈에 보여 준다 (강사·학생 모두).
+// 사이드바의 "오늘의 현황" 패널: 자습실별 신청 현황을 한눈에 보여 준다 (강사·학생 모두).
 // 화면이 열릴 때와 30초마다 서버에서 다시 불러온다. 판단은 서버 값(currentCount)을 그대로 보여 줄 뿐이다.
 const rooms = ref<StudyRoom[]>([])
 const loading = ref(true)
@@ -41,12 +41,12 @@ onBeforeUnmount(() => clearInterval(timer))
 </script>
 
 <template>
-  <section class="raehaus">
+  <section class="status-panel">
     <div class="d-flex align-center mb-3">
-      <span class="raehaus-icon me-3"><v-icon :icon="mdiHomeVariantOutline" size="20" /></span>
+      <span class="status-icon me-3"><v-icon :icon="mdiChartBox" size="20" /></span>
       <div class="flex-grow-1">
-        <div class="raehaus-title">래하우스</div>
-        <div class="raehaus-sub">오늘의 자습실 현황</div>
+        <div class="status-title">오늘의 현황</div>
+        <div class="status-sub">자습실별 신청 인원</div>
       </div>
       <v-btn
         :icon="mdiRefresh"
@@ -80,7 +80,7 @@ onBeforeUnmount(() => clearInterval(timer))
       <div v-if="hiddenCount > 0" class="text-caption text-medium-emphasis mb-2">
         외 {{ hiddenCount }}곳
       </div>
-      <div class="raehaus-total">
+      <div class="status-total">
         현재 신청 <strong>{{ total }}명</strong>
       </div>
     </template>
@@ -88,14 +88,14 @@ onBeforeUnmount(() => clearInterval(timer))
 </template>
 
 <style scoped>
-.raehaus {
+.status-panel {
   margin: 8px 12px;
   padding: 16px;
   border: 1px solid var(--line);
   border-radius: 12px;
   background: #fafafa;
 }
-.raehaus-icon {
+.status-icon {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -106,13 +106,13 @@ onBeforeUnmount(() => clearInterval(timer))
   color: #fff;
   flex: none;
 }
-.raehaus-title {
+.status-title {
   font-weight: 700;
   font-size: 1rem;
   letter-spacing: -0.02em;
   line-height: 1.2;
 }
-.raehaus-sub {
+.status-sub {
   font-size: 0.75rem;
   color: var(--muted);
 }
@@ -127,7 +127,7 @@ onBeforeUnmount(() => clearInterval(timer))
   font-size: 0.8rem;
   font-weight: 600;
 }
-.raehaus-total {
+.status-total {
   margin-top: 4px;
   padding-top: 10px;
   border-top: 1px dashed var(--line);
