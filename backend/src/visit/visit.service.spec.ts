@@ -88,7 +88,7 @@ describe('VisitService', () => {
   const makeRoom = (maxPersonnel = 2) =>
     roomService.create({
       name: '1자습실',
-      branch: 'H' as const,
+      hall: 'MAIN' as const,
       maxPersonnel,
       startDate: START,
       endDate: END,
@@ -117,7 +117,7 @@ describe('VisitService', () => {
       const [s1, s2] = await seedStudents(2);
       const room = await roomService.create({
         name: '긴 운영 기간',
-        branch: 'H' as const,
+        hall: 'MAIN' as const,
         maxPersonnel: 3,
         startDate: at(-DAY),
         endDate: at(30 * DAY),
@@ -139,7 +139,7 @@ describe('VisitService', () => {
       const [s1, s2] = await seedStudents(2);
       const room = await roomService.create({
         name: '긴 운영 기간',
-        branch: 'H' as const,
+        hall: 'MAIN' as const,
         maxPersonnel: 3,
         startDate: at(-DAY),
         endDate: at(30 * DAY),
@@ -168,7 +168,7 @@ describe('VisitService', () => {
       const [s1] = await seedStudents(1);
       const room = await roomService.create({
         name: '긴 운영 기간',
-        branch: 'H' as const,
+        hall: 'MAIN' as const,
         maxPersonnel: 3,
         startDate: at(-DAY),
         endDate: at(30 * DAY),
@@ -199,7 +199,7 @@ describe('VisitService', () => {
       const [s1, s2] = await seedStudents(2);
       const room = await roomService.create({
         name: '긴 운영 기간',
-        branch: 'H' as const,
+        hall: 'MAIN' as const,
         maxPersonnel: 3,
         startDate: at(-DAY),
         endDate: at(30 * DAY),
@@ -438,7 +438,7 @@ describe('VisitService', () => {
     const end = new Date(now.getTime() + 48 * HOUR).toISOString();
     const room = await roomService.create({
       name: '경계 테스트',
-      branch: 'H' as const,
+      hall: 'MAIN' as const,
       maxPersonnel: 3,
       startDate: start,
       endDate: end,

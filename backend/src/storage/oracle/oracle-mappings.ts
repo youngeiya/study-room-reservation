@@ -96,7 +96,7 @@ const TABLES: TableSpec[] = [
     versioned: true,
     columns: [
       s('name', 'name'),
-      s('branch', 'branch'),
+      s('hall', 'hall'),
       n('maxPersonnel', 'max_personnel'),
       n('currentCount', 'current_count'),
       s('imageKey', 'image_key'),

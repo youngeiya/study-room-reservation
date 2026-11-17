@@ -8,8 +8,8 @@ import {
   Max,
   Min,
 } from 'class-validator';
-import { BRANCH_CODES } from '../branch';
-import type { BranchCode } from '../branch';
+import { HALL_CODES } from '../hall';
+import type { HallCode } from '../hall';
 
 export class CreateStudyRoomDto {
   @IsString()
@@ -17,9 +17,9 @@ export class CreateStudyRoomDto {
   @MaxLength(50)
   name: string;
 
-  // 소속 지점: 자습실은 반드시 한 지점에 속한다
-  @IsIn(BRANCH_CODES, { message: '지점을 선택해 주세요.' })
-  branch: BranchCode;
+  // 소속 관: 자습실은 반드시 한 관에 속한다
+  @IsIn(HALL_CODES, { message: '관을 선택해 주세요.' })
+  hall: HallCode;
 
   @IsInt()
   @Min(1)

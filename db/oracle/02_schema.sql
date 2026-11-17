@@ -95,7 +95,7 @@ CREATE TABLE study_room (
   id              NUMBER GENERATED ALWAYS AS IDENTITY,
   version         NUMBER(10)          DEFAULT 0 NOT NULL,
   name            VARCHAR2(50 CHAR)             NOT NULL,
-  branch          VARCHAR2(10)        DEFAULT 'H' NOT NULL,
+  hall            VARCHAR2(10)        DEFAULT 'MAIN' NOT NULL,
   max_personnel   NUMBER(5)                     NOT NULL,
   current_count   NUMBER(5)           DEFAULT 0 NOT NULL,
   image_key       VARCHAR2(200),
@@ -109,8 +109,8 @@ CREATE TABLE study_room (
   -- 현재 인원은 0 이상, 최대 인원 이하. 서비스 검사가 뚫려도 DB 가 정원 초과/음수를 막는다.
   CONSTRAINT ck_room_count_range CHECK (current_count >= 0 AND current_count <= max_personnel),
   CONSTRAINT ck_room_period CHECK (start_date < end_date),
-  -- 소속 지점: H관 · S관 · 목동 · 반포 (코드는 앱의 BRANCH_CODES 와 같다)
-  CONSTRAINT ck_room_branch CHECK (branch IN ('H', 'S', 'MOKDONG', 'BANPO'))
+  -- 소속 관: 본관(MAIN) · 별관(ANNEX) · 동관(EAST) · 서관(WEST) (코드는 앱의 HALL_CODES 와 같다)
+  CONSTRAINT ck_room_hall CHECK (hall IN ('MAIN', 'ANNEX', 'EAST', 'WEST'))
 );
 
 COMMENT ON TABLE  study_room               IS '자습실';

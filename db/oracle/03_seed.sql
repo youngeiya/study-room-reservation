@@ -15,12 +15,12 @@ INSERT INTO student (name, phone, student_no, grade, guardian_phone) VALUES ('�
 --   (원장: INSTRUCTOR_ID/INSTRUCTOR_PASSWORD, 예시 강사 6명: 사번이 있는 강사가 없을 때 한 번, 초기 비밀번호는 사번)
 
 -- 운영 기간: 어제부터 30일 뒤까지 (UTC 기준)
-INSERT INTO study_room (name, branch, max_personnel, start_date, end_date)
-VALUES ('부엉이 라이브러리 1관', 'H', 10, SYS_EXTRACT_UTC(SYSTIMESTAMP) - INTERVAL '1' DAY, SYS_EXTRACT_UTC(SYSTIMESTAMP) + INTERVAL '30' DAY);
-INSERT INTO study_room (name, branch, max_personnel, start_date, end_date)
-VALUES ('부엉이 라이브러리 2관', 'S', 10, SYS_EXTRACT_UTC(SYSTIMESTAMP) - INTERVAL '1' DAY, SYS_EXTRACT_UTC(SYSTIMESTAMP) + INTERVAL '30' DAY);
-INSERT INTO study_room (name, branch, max_personnel, start_date, end_date)
-VALUES ('부엉이 라이브러리 3관 (소수 정예)', 'MOKDONG', 5, SYS_EXTRACT_UTC(SYSTIMESTAMP) - INTERVAL '1' DAY, SYS_EXTRACT_UTC(SYSTIMESTAMP) + INTERVAL '30' DAY);
+INSERT INTO study_room (name, hall, max_personnel, start_date, end_date)
+VALUES ('본관 제1자습실', 'MAIN', 10, SYS_EXTRACT_UTC(SYSTIMESTAMP) - INTERVAL '1' DAY, SYS_EXTRACT_UTC(SYSTIMESTAMP) + INTERVAL '30' DAY);
+INSERT INTO study_room (name, hall, max_personnel, start_date, end_date)
+VALUES ('별관 제1자습실', 'ANNEX', 10, SYS_EXTRACT_UTC(SYSTIMESTAMP) - INTERVAL '1' DAY, SYS_EXTRACT_UTC(SYSTIMESTAMP) + INTERVAL '30' DAY);
+INSERT INTO study_room (name, hall, max_personnel, start_date, end_date)
+VALUES ('동관 제1자습실 (소수 정예)', 'EAST', 5, SYS_EXTRACT_UTC(SYSTIMESTAMP) - INTERVAL '1' DAY, SYS_EXTRACT_UTC(SYSTIMESTAMP) + INTERVAL '30' DAY);
 
 COMMIT;
 EXIT

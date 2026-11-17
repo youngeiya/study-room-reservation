@@ -9,8 +9,8 @@ import {
   Max,
   Min,
 } from 'class-validator';
-import { BRANCH_CODES } from '../branch';
-import type { BranchCode } from '../branch';
+import { HALL_CODES } from '../hall';
+import type { HallCode } from '../hall';
 
 /** 보낸 필드만 수정한다 (PATCH). */
 export class UpdateStudyRoomDto {
@@ -21,8 +21,8 @@ export class UpdateStudyRoomDto {
   name?: string;
 
   @IsOptional()
-  @IsIn(BRANCH_CODES, { message: '지점을 선택해 주세요.' })
-  branch?: BranchCode;
+  @IsIn(HALL_CODES, { message: '관을 선택해 주세요.' })
+  hall?: HallCode;
 
   @IsOptional()
   @IsInt()
