@@ -11,6 +11,7 @@ import { useRouteNames } from '@/composables/useRouteNames'
 import { useSessionStore } from '@/stores/session'
 import { useStatusStore } from '@/stores/status'
 import { formatDateTime, isoToLocalInput, localInputToIso } from '@/utils/datetime'
+import { branchOf } from '@/config/academy'
 import { isFull as isRoomFull, occupancyColor, occupancyPercent } from '@/utils/room'
 
 const route = useRoute()
@@ -197,6 +198,9 @@ async function cancelVisit(visit: VisitView) {
       <RoomImage :room="room" :height="260" />
       <v-card-item>
         <template #title>
+          <v-chip v-if="branchOf(room.branch)" size="small" variant="outlined" class="me-3">
+            {{ branchOf(room.branch)?.short }}
+          </v-chip>
           <span class="text-h5 font-weight-bold">{{ room.name }}</span>
         </template>
         <template #append>
