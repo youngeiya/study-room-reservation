@@ -285,24 +285,28 @@ ValidationPipe      요청 body를 DTO 규칙으로 검사 (실패 → 400 VALID
 
 ```
 backend/src
-  common/       공통: 에러 코드, BusinessException, 예외 필터, 응답 인터셉터, Clock
+  common/       공통: 에러 코드, BusinessException, 예외 필터, 응답 인터셉터, Clock, 선택 입력 정리
   storage/      Database·Repository 추상화, JsonDatabase(트랜잭션·낙관적 락), oracle/(OracleDatabase·OracleRepository·테이블 매핑)
-  auth/         로그인: 토큰(JWT)·비밀번호 해시(scrypt)·전역 가드·@Roles/@Public 데코레이터
-  instructor/   강사 계정: entity, service(기본 계정 생성), module
-  student/      학생: entity, service, controller, module
-  study-room/   자습실: entity, dto, service, controller, module
-  visit/        방문 신청·이력: entity, dto, service, controller, module
-docker-compose.yml          backend / frontend 컨테이너와 데이터 볼륨 (각 폴더의 Dockerfile 사용)
+  image/        이미지 저장소 추상화(ImageStorage)와 SeaweedFS 구현 (자습실 사진)
+  auth/         로그인: 토큰(JWT)·비밀번호 해시(scrypt)·전역 가드·@Roles/@Public 데코레이터·로그인 시도 제한
+  instructor/   강사 관리: entity(직책·담당 과목·재직 상태), dto, service(기본 계정·예시 강사), controller, module
+  student/      학생: entity, dto, service, controller, module
+  study-room/   자습실: entity, dto, service(관·사진 포함), controller, module, hall(관 코드)
+  visit/        방문 신청·이력: entity, dto, service(하루 1건·예약 가능 기간·오늘 요약), controller, module
+docker-compose.yml          frontend(nginx) / backend / seaweedfs 컨테이너와 데이터 볼륨 (각 폴더의 Dockerfile 사용)
+db/oracle/                  Oracle 스키마·시드·쿼리·마이그레이션(05~12)
+docs/                       개발 환경 · 시스템 아키텍처 · 데이터 모델 문서
 frontend/src
   api/          서버 호출 (client: 응답 공통 처리, index: 엔드포인트별 함수, types)
-  stores/       Pinia (로그인 사용자·토큰)
-  layouts/      역할별 화면 틀 (강사 관리 / 학생 예약)
+  stores/       Pinia (로그인 사용자·토큰, 상단바 현황 갱신 신호)
+  layouts/      역할별 화면 틀 (강사: 관리자 / 학생: 자습실 예약)
   router/       라우트와 역할 가드
-  views/        화면 (로그인, 자습실 목록·상세, 학생 관리, 내 신청)
+  views/        화면 (로그인, 자습실 목록(관별 탭)·상세, 학생 관리, 강사 관리, 내 신청)
   plugins/      Vuetify 설정 (테마, 아이콘, 한국어)
-  components/   재사용 컴포넌트 (RoomForm)
+  components/   재사용 컴포넌트 (AppShell, HeaderStatus, InfoDialog, TodayStatusPanel, RoomForm, RoomImage, AddressSearchDialog, PasswordDialog, BrandLogo)
+  config/       관(건물) 정보: 이름·주소·운영 시간 (이용 안내·오시는 길)
   composables/  useAction (진행 상태·오류 문구 공통 처리)
-  utils/        날짜 변환
+  utils/        날짜 변환, 자습실 인원 표시, 강사 라벨, 운영 시간 계산
 ```
 
 | 계층 | 책임 | 하지 않는 것 |
@@ -514,12 +518,12 @@ B: 커밋 — version 5 != 6 → 충돌 → 처음부터 재시도 → 10/10 을
 | `04_queries.sql` | 신청·취소·수정·삭제·로그인 등 핵심 쿼리와 낙관적 락 UPDATE 예시 |
 | `05_auth_migration.sql` | 로그인 기능 이전에 만든 스키마에 `student.password_hash`와 `instructor` 테이블을 추가하는 마이그레이션 |
 | `06_address_migration.sql` | 주소 기능 이전에 만든 스키마에 `student.zip_code`, `address`, `address_detail` 컬럼을 추가하는 마이그레이션 |
+| `07_room_image_migration.sql` | 사진 기능 이전에 만든 스키마에 `study_room.image_key` 컬럼을 추가하는 마이그레이션 |
+| `08_one_visit_per_day_migration.sql` | "활성 신청 1건" 규칙을 "하루(한국 시간)에 1건"으로 바꾸는 마이그레이션 (`uq_visit_room_student` 제약과 `uq_visit_student_active` 인덱스를 지우고 `uq_visit_student_day` 인덱스를 만든다) |
 | `09_instructor_management_migration.sql` | 강사 관리 기능 이전에 만든 스키마에 `instructor.deleted_at` 컬럼을 추가하고, 아이디 유일 제약을 "삭제되지 않은 강사끼리 유일" 인덱스(`uq_instructor_login_active`)로 바꾸는 마이그레이션 |
 | `10_instructor_profile_migration.sql` | 강사 등록 항목 확장 이전에 만든 스키마에 `employee_no`, `phone`, `email`, `job_title`, `subjects`, `status`, `hire_date`, `memo` 컬럼과 직책·재직 상태 값 제약, 사번 유일 인덱스(`uq_instructor_employee_active`)를 추가하고 기본 계정(admin)을 원장으로 지정하는 마이그레이션 |
 | `11_room_branch_migration.sql` | 자습실에 소속 구분 컬럼(`branch`, 기본 H)과 값 제약을 추가하는 첫 버전 마이그레이션 (12에서 관 이름으로 교체됨) |
 | `12_room_hall_migration.sql` | 11을 이미 실행한 DB용: 소속 구분을 `hall`(본관 `MAIN`·별관 `ANNEX`·동관 `EAST`·서관 `WEST`)로 바꾸고 기존 값과 제약을 새 코드로 변환, 예시 자습실 3개 이름을 관 이름에 맞게 변경 |
-| `08_one_visit_per_day_migration.sql` | "활성 신청 1건" 규칙을 "하루(한국 시간)에 1건"으로 바꾸는 마이그레이션 (`uq_visit_room_student` 제약과 `uq_visit_student_active` 인덱스를 지우고 `uq_visit_student_day` 인덱스를 만든다) |
-| `07_room_image_migration.sql` | 사진 기능 이전에 만든 스키마에 `study_room.image_key` 컬럼을 추가하는 마이그레이션 |
 
 서비스에서 하던 검사의 최종 방어선을 DB 제약으로도 둡니다. 예를 들어 `CHECK (current_count BETWEEN 0 AND max_personnel)`로 정원 초과·음수를 막고, 함수 기반 유니크 인덱스로 "삭제되지 않은 학생끼리 학번 유일"과 "학생당 하루 활성 신청 한 건"을 보장합니다. 위반 쿼리를 직접 실행해 제약이 거부하는 것과, `WHERE version = ?` 조건의 UPDATE 가 충돌 시 0행을 반환하는 것을 확인했습니다.
 
@@ -593,6 +597,8 @@ B: 커밋 — version 5 != 6 → 충돌 → 처음부터 재시도 → 10/10 을
 - **"하루 1건"의 하루는 한국 시간(UTC+9)으로 고정했습니다.** 설정으로 바꿀 수 없고(해외 시간대 지원 없음), 신청에는 시간 길이가 없어서 같은 날 오전과 오후 두 번 방문하는 식의 신청은 받지 않습니다. 같은 날 시간대가 겹치지 않는 신청을 허용하려면 신청에 종료 시각(이용 시간)이 먼저 필요합니다. 또 학생당 활성 신청 수 자체에는 상한이 없어서(예약 가능 기간이 3일이라 사실상 3~4건) 기간을 늘리면 신청 건수도 늘어납니다.
 - **사진 저장소(SeaweedFS)는 단일 컨테이너라 복제·백업이 없습니다.** master·volume·filer를 한 컨테이너로 띄워 간단히 구성했고, `seaweed-data` 볼륨을 지우거나 디스크가 망가지면 사진이 사라집니다(DB에는 경로만 남아 사진이 "없는 것"처럼 보입니다). DB 백업과 사진 백업은 따로 해야 하며, 실서비스에서는 복제 설정이나 별도 백업이 필요합니다. 사진은 백엔드를 거쳐 내려가므로 사진이 많거나 접속이 몰리면 백엔드가 병목이 될 수 있고(CDN이나 저장소 직접 서빙으로 분리 가능), 썸네일·리사이즈를 만들지 않아 목록에서도 원본 크기(최대 5MB)를 불러옵니다. 사진 저장소와의 실제 연동은 직접 띄워 확인했지만, 자동 테스트는 메모리 저장소로 대신해서 SeaweedFS 자체에 대한 자동 통합 테스트는 없습니다.
 - **주소 검색은 외부 서비스(카카오 우편번호)에 의존합니다.** 승인키가 필요 없고 설정이 간단한 대신, 브라우저가 카카오 스크립트를 불러올 수 있어야 하고(인터넷이 막히면 검색이 안 됨) 서비스가 바뀌거나 중단되면 영향을 받습니다. 주소 칸은 직접 입력이 아니라 **검색해서 고르는 방식만** 허용해서 오타는 막지만, 검색 서비스가 안 될 때 대신 직접 입력할 방법은 없습니다(주소는 선택 항목이라 비워 둘 수는 있습니다). 서버는 주소가 실제로 존재하는지 다시 검증하지 않고 길이·우편번호 형식만 확인합니다. 상세주소(동·호수)는 자유 입력입니다.
+- **관(건물) 목록은 코드와 DB 제약에 고정되어 있습니다.** 본관·별관·동관·서관 4개 코드가 서버의 `HALL_CODES`, 화면 설정, DB의 `ck_room_hall` 제약에 들어 있어서, 관을 늘리거나 이름을 바꾸려면 세 곳과 마이그레이션을 함께 고쳐야 합니다(관을 관리하는 화면과 테이블은 만들지 않았습니다). 또 강사는 모든 관의 자습실을 관리할 수 있고 관별 담당이나 권한 구분은 없습니다.
+- **강사 권한 구분과 예시 계정의 약한 비밀번호.** 강사는 모두 같은 권한(자습실·학생·다른 강사 관리)이고 원장/일반 강사의 구분이 없습니다. 예시 강사의 초기 비밀번호는 사번과 같아 추측하기 쉬우므로, 실서비스에서는 `SEED_SAMPLE_INSTRUCTORS=false`로 끄고 기본 계정의 비밀번호를 바꿔야 합니다.
 - **관 정보(이름·주소·운영 시간)는 코드의 설정 파일에 있고, 시연용으로 임의로 만든 가상의 정보입니다.** 이용 안내·오시는 길의 4개 관(본관·별관·동관·서관) 정보는 `frontend/src/config/academy.ts` 한 곳에 두었고, 바꾸려면 파일을 고쳐 다시 배포해야 합니다(강사 화면에서 수정하는 기능은 만들지 않았습니다). 가상 주소라서 지도 링크는 넣지 않았고, 연락처도 없습니다. 지금 설정은 모든 관이 매일 24시간 운영이라 "운영 중"으로 계속 표시되며, 운영 시간을 바꾸면 한국 시간 기준으로 운영 중·종료를 계산합니다(요일 구분이 없고 공휴일·휴무는 반영하지 않습니다).
 - **글꼴(Pretendard)은 CDN에서 불러옵니다.** 불러오지 못하면 시스템 글꼴로 대신 표시되어 모양만 조금 달라지고 기능에는 영향이 없습니다. 오프라인 환경에서도 똑같이 보이게 하려면 글꼴 파일을 프로젝트에 포함해야 합니다.
 - 목록 페이지네이션이 없고, 프론트엔드 자동 테스트는 날짜 변환 유틸에 한정됩니다 (화면 단위·E2E 테스트 없음. 화면은 헤드리스 브라우저로 직접 시나리오를 확인했지만 코드로 남기지는 않았습니다). 백엔드는 서비스 단위 테스트, 로그인·권한 e2e(HTTP), Oracle 통합 테스트가 있습니다.
