@@ -91,3 +91,51 @@ body,
 .v-table thead th {
   font-weight: 600 !important;
 }
+
+/* 왼쪽 사이드바 */
+.side-bar {
+  border-right: 1px solid var(--line) !important;
+  background: #fff !important;
+}
+.side-label {
+  padding: 20px 28px 4px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  color: var(--muted);
+}
+.side-nav .v-list-item {
+  margin-bottom: 4px;
+  min-height: 46px;
+  font-weight: 500;
+  color: #444;
+}
+/* 아이콘과 글자 사이 간격을 좁힌다 */
+.side-nav .v-list-item__spacer {
+  width: 14px !important;
+}
+.side-nav .v-list-item--active {
+  background: #111 !important;
+  color: #fff !important;
+}
+.side-nav .v-list-item--active .v-list-item__overlay {
+  display: none;
+}
+.side-user {
+  padding: 16px;
+  border-top: 1px solid var(--line);
+}
+.side-user-name {
+  font-weight: 600;
+  font-size: 0.92rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.side-user-sub {
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+.min-width-0 {
+  min-width: 0;
+}

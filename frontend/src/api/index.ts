@@ -1,6 +1,8 @@
 import { request } from './client'
 import type {
   AuthUser,
+  Instructor,
+  InstructorPayload,
   LoginResult,
   Role,
   RoomPayload,
@@ -38,6 +40,13 @@ export const api = {
     return request<StudyRoom>('POST', `/study-rooms/${id}/image`, form)
   },
   deleteRoomImage: (id: number) => request<StudyRoom>('DELETE', `/study-rooms/${id}/image`),
+
+  // 강사 계정 관리
+  listInstructors: () => request<Instructor[]>('GET', '/instructors'),
+  createInstructor: (body: InstructorPayload) => request<Instructor>('POST', '/instructors', body),
+  updateInstructor: (id: number, body: Partial<InstructorPayload>) =>
+    request<Instructor>('PATCH', `/instructors/${id}`, body),
+  deleteInstructor: (id: number) => request<null>('DELETE', `/instructors/${id}`),
 
   // 학생
   listStudents: () => request<Student[]>('GET', '/students'),

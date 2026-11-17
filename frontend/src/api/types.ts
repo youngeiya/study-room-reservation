@@ -109,3 +109,21 @@ export interface RoomPayload {
   startDate: string
   endDate: string
 }
+
+/** 강사 계정 (비밀번호는 내려오지 않는다) */
+export interface Instructor {
+  id: number
+  version: number
+  loginId: string
+  name: string
+  createdAt: string
+  updatedAt: string
+  deletedAt: string | null
+}
+
+/** 강사 등록·수정 요청. 수정할 때 password 는 비밀번호를 재설정할 때만 보낸다. */
+export interface InstructorPayload {
+  loginId: string
+  name: string
+  password?: string
+}
