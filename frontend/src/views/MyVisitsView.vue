@@ -5,11 +5,13 @@ import type { VisitView } from '@/api/types'
 import { useAction } from '@/composables/useAction'
 import { useRouteNames } from '@/composables/useRouteNames'
 import { useSessionStore } from '@/stores/session'
+import { useStatusStore } from '@/stores/status'
 import { formatDateTime, isoToLocalInput, localInputToIso } from '@/utils/datetime'
 
 // FR-VST-04: 학생 본인의 신청 목록 (취소된 신청도 상태와 함께 보여 준다)
 const session = useSessionStore()
 const names = useRouteNames()
+const status = useStatusStore() // 수정·취소하면 상단바의 현황을 다시 불러오게 알린다
 const { error, busy, run } = useAction()
 
 const visits = ref<VisitView[]>([])
@@ -34,6 +36,7 @@ async function saveEdit(v: VisitView) {
   )
   if (updated) {
     editingId.value = null
+    status.bump()
     await load()
   }
 }
@@ -42,7 +45,10 @@ async function saveEdit(v: VisitView) {
 async function cancel(v: VisitView) {
   if (!confirm('방문 신청을 취소할까요?')) return
   const cancelled = await run(() => api.cancelVisit(v.id))
-  if (cancelled) await load()
+  if (cancelled) {
+    status.bump()
+    await load()
+  }
 }
 
 onMounted(load)

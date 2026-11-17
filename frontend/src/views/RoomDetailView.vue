@@ -9,6 +9,7 @@ import RoomImage from '@/components/RoomImage.vue'
 import { useAction } from '@/composables/useAction'
 import { useRouteNames } from '@/composables/useRouteNames'
 import { useSessionStore } from '@/stores/session'
+import { useStatusStore } from '@/stores/status'
 import { formatDateTime, isoToLocalInput, localInputToIso } from '@/utils/datetime'
 import { isFull as isRoomFull, occupancyColor, occupancyPercent } from '@/utils/room'
 
@@ -16,6 +17,7 @@ const route = useRoute()
 const router = useRouter()
 const session = useSessionStore()
 const names = useRouteNames()
+const status = useStatusStore() // 신청·수정·취소하면 상단바의 현황을 다시 불러오게 알린다
 const { error, errorCode, busy, run } = useAction()
 
 const roomId = computed(() => Number(route.params.id))
@@ -137,6 +139,7 @@ async function apply() {
   )
   if (created) {
     applyInput.value = ''
+    status.bump()
     await load()
   } else if (errorCode.value === 'ROOM_FULL') {
     // 정원 초과는 눈에 띄게 경고창으로 알린다. (판단은 서버가 하고, 화면은 그 결과를 알려 줄 뿐)
@@ -165,6 +168,7 @@ async function saveVisit(visit: VisitView) {
   )
   if (updated) {
     closeEdit()
+    status.bump()
     await load()
   }
 }
@@ -173,7 +177,10 @@ async function saveVisit(visit: VisitView) {
 async function cancelVisit(visit: VisitView) {
   if (!confirm('방문 신청을 취소할까요?')) return
   const cancelled = await run(() => api.cancelVisit(visit.id))
-  if (cancelled) await load()
+  if (cancelled) {
+    status.bump()
+    await load()
+  }
 }
 </script>
 

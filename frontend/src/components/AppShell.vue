@@ -2,8 +2,10 @@
 import { ref } from 'vue'
 import { RouterView, useRouter } from 'vue-router'
 import { useDisplay } from 'vuetify'
-import { mdiChevronDown, mdiLock, mdiLogout, mdiMenu } from '@mdi/js'
+import { mdiChevronDown, mdiInformationOutline, mdiLock, mdiLogout, mdiMenu } from '@mdi/js'
 import BrandLogo from '@/components/BrandLogo.vue'
+import HeaderStatus from '@/components/HeaderStatus.vue'
+import InfoDialog from '@/components/InfoDialog.vue'
 import PasswordDialog from '@/components/PasswordDialog.vue'
 import TodayStatusPanel from '@/components/TodayStatusPanel.vue'
 import { useSessionStore } from '@/stores/session'
@@ -23,7 +25,14 @@ const router = useRouter()
 const session = useSessionStore()
 const { mdAndUp } = useDisplay()
 const showPassword = ref(false)
+const showInfo = ref(false) // 이용 안내 · 오시는 길 창
 const drawer = ref(false) // 모바일에서만 의미가 있다 (넓은 화면에서는 항상 열려 있다)
+
+// 사이드바(모바일에서는 서랍)의 "이용 안내" 버튼: 서랍을 닫고 안내 창을 연다
+function openInfoFromDrawer() {
+  drawer.value = false
+  showInfo.value = true
+}
 
 function logout() {
   session.logout()
@@ -48,6 +57,9 @@ function logout() {
       <span class="sub-title">{{ title }}</span>
 
       <v-spacer />
+
+      <!-- 운영 상태 · 개인 현황 · 이용 안내 (넓은 화면에서만. 모바일은 사이드바에서 연다) -->
+      <HeaderStatus v-if="mdAndUp" class="me-3" @open-info="showInfo = true" />
 
       <v-menu>
         <template #activator="{ props }">
@@ -90,6 +102,18 @@ function logout() {
       />
     </v-list>
 
+    <div class="px-3">
+      <v-btn
+        block
+        variant="text"
+        :prepend-icon="mdiInformationOutline"
+        class="justify-start"
+        @click="openInfoFromDrawer"
+      >
+        이용 안내 · 오시는 길
+      </v-btn>
+    </div>
+
     <TodayStatusPanel />
 
     <template #append>
@@ -115,4 +139,5 @@ function logout() {
   </v-main>
 
   <PasswordDialog v-model="showPassword" />
+  <InfoDialog v-model="showInfo" />
 </template>

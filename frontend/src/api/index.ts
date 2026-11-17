@@ -11,6 +11,7 @@ import type {
   StudyRoom,
   VisitHistory,
   VisitReservation,
+  VisitSummary,
   VisitView,
 } from './types'
 
@@ -22,6 +23,8 @@ export const api = {
   me: () => request<AuthUser>('GET', '/auth/me'),
   // 예약 가능 기간(지금부터 며칠 이내). 날짜 입력 범위와 안내 문구에 쓴다.
   getBookingPolicy: () => request<{ maxDaysAhead: number }>('GET', '/booking-policy'),
+  // 오늘 신청 요약 (강사 전용, 상단바 현황)
+  getVisitSummary: () => request<VisitSummary>('GET', '/visit-summary'),
   changePassword: (body: { currentPassword: string; newPassword: string }) =>
     request<null>('PATCH', '/auth/password', body),
 

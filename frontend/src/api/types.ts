@@ -152,3 +152,9 @@ export interface InstructorPayload {
   memo: string | null
   status?: InstructorStatus
 }
+
+/** 오늘(한국 시간) 방문하는 활성 신청 요약 (강사) */
+export interface VisitSummary {
+  date: string
+  todayCount: number
+}
